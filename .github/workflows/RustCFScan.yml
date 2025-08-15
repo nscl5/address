@@ -1,43 +1,42 @@
-name: Rust CF Scan
+name: Run RScanner
 
 on:
-  workflow_dispatch: # Memungkinkan dijalankan secara manual
-  # Workflow dijalankan otomatis tiap 6 jam
+  workflow_dispatch: 
   schedule:
-    - cron: '0 */6 * * *'  # Setiap 6 jam (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */24 * * *' 
 
 
 jobs:
   update-proxies:
     runs-on: ubuntu-latest
-    name: 🔎 Scan Proxy Rust Binary
+    name: Scan proxy IPs
 
     steps:
-    - name: 📂 Checkout Repository
+    - name: Checkout Repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
         token: ${{ secrets.GIT_TOKEN }}
 
-    - name: 🛠️ Install Rust Toolchain
+    - name: Install Rust Toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: 📦 Build Rust Project (Release)
+    - name: Build Rust Project (Release)
       run: cargo build --release
 
-    - name: 🧪 Give Execute Permission to Binary
+    - name: Give Execute Permission to Binary
       run: chmod +x ./target/release/cekproxy
 
-    - name: 🚀 Run Rust Binary
+    - name: Run RScanner
       run: ./target/release/cekproxy
 
-    - name: 📤 Commit and Push Changes
+    - name: Commit and Push Changes
       if: ${{ success() }}
       run: |
         git config --global user.name "Github Actions"
         git config --global user.email "actions@github.com"
         git add Data/alive.txt
-        git commit -m " 🔁 Update proxyip"
+        git commit -m "Update proxies recently"
         git push origin main --force
       shell: bash
 
