@@ -1,4 +1,3 @@
-# create by mayumi v.1
 """
 NOte add lib re
 """
@@ -13,7 +12,7 @@ PATH_RESOLVER = "/meta"
 PROXY_FILE = "Data/ProxyIsp.txt"
 OUTPUT_FILE = "Data/alive.txt"
 
-active_proxies = []  # List untuk menyimpan proxy aktif
+active_proxies = [] 
 
 def check(host, path, proxy):
     """Melakukan koneksi SSL ke host tertentu dan mengambil respons JSON."""
@@ -57,7 +56,7 @@ def check(host, path, proxy):
 
     return {}
 
-def clean_org_name(org_name): #Menghapus karakter yang tidak diinginkan dari nama organisasi.
+def clean_org_name(org_name):
     return re.sub(r'[^a-zA-Z0-9\s]', '', org_name) if org_name else org_name
 
 def process_proxy(proxy_line):
@@ -91,11 +90,9 @@ def process_proxy(proxy_line):
     except Exception as e:
         print(f"Error saat memproses proxy {proxy_line}: {e}")
 
-# Kosongkan file sebelum memulai scan
 open(OUTPUT_FILE, "w").close()
 print(f"File {OUTPUT_FILE} telah dikosongkan sebelum proses scan dimulai.")
 
-# Membaca daftar proxy dari file
 try:
     with open(PROXY_FILE, "r") as f:
         proxies = f.readlines()
@@ -109,7 +106,6 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = [executor.submit(process_proxy, proxy_line) for proxy_line in proxies]
     concurrent.futures.wait(futures)
 
-# Setelah semua proxy diproses, simpan ke file
 if active_proxies:
     with open(OUTPUT_FILE, "w") as f_me:
         f_me.write("\n".join(active_proxies) + "\n")
