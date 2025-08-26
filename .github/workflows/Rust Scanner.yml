@@ -25,10 +25,10 @@ jobs:
       run: cargo build --release
 
     - name: Give Execute Permission to Binary
-      run: chmod +x ./target/release/cekproxy
+      run: chmod +x ./target/release/proxy-scanner
 
     - name: Run RScanner
-      run: ./target/release/cekproxy
+      run: ./target/release/proxy-scanner
 
     - name: Commit and Push Changes
       if: ${{ success() }}
