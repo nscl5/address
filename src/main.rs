@@ -7,13 +7,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::StreamExt;
-use reqwest;
+use native_tls::TlsConnector as NativeTlsConnector;
 use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
 const PROXY_FILE: &str = "Data/test.txt";
 const OUTPUT_FILE: &str = "active_proxies.md";
 const MAX_CONCURRENT: usize = 50; // کاهش تعداد درخواست‌های همزمان
-const TIMEOUT_SECONDS: u64 = 10; // افزایش timeout
+const TIMEOUT_SECONDS: u64 = 12; // افزایش timeout
 
 // نقشه کشورها برای تبدیل کد دو حرفی به نام کامل
 fn get_country_name(country_code: &str) -> String {
@@ -124,13 +127,13 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 #[derive(Deserialize, Debug, Clone)]
 struct ProxyInfo {
     ip: String,
-    delay: Option<String>,
-    isp: Option<String>,
-    asn: Option<String>,
-    city: Option<String>,
-    region: Option<String>,
-    country: Option<String>,
-    countryflag: Option<String>,
+    delay: String,
+    isp: String,
+    asn: String,
+    city: String,
+    region: String,
+    country: String,
+    countryflag: String,
 }
 
 #[tokio::main]
@@ -173,7 +176,7 @@ async fn main() -> Result<()> {
 
     write_markdown_file(&active_proxies.lock().unwrap())?;
 
-    println!("✅ Proxy checking completed.");
+    println!("🟢 Proxy checking completed.");
     Ok(())
 }
 
@@ -183,7 +186,10 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
     // نوشتن هدر فایل
     writeln!(file, "# 🌐 Active Proxies Report")?;
     writeln!(file, "")?;
-    writeln!(file, "Generated at: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
+    writeln!(file, "Generated at: {}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs())?;
     writeln!(file, "")?;
     
     if proxies_by_country.is_empty() {
@@ -211,21 +217,15 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
     for (country_code, proxies) in countries {
         let country_name = get_country_name(country_code);
         
-        writeln!(file, "## {} ({})", country_name, proxies.len())?;
+        writeln!(file, "## {} ({} proxies)", country_name, proxies.len())?;
         writeln!(file, "")?;
         
-        // مرتب‌سازی پروکسی‌ها براساس IP
+        // مرتب‌سازی پروکسی‌ها براساس تاخیر
         let mut sorted_proxies = proxies.clone();
         sorted_proxies.sort_by(|a, b| {
-            // مرتب‌سازی براساس تاخیر اگر موجود باشد، سپس IP
-            match (&a.delay, &b.delay) {
-                (Some(delay_a), Some(delay_b)) => {
-                    let delay_a_num = delay_a.trim_end_matches("ms").parse::<f32>().unwrap_or(9999.0);
-                    let delay_b_num = delay_b.trim_end_matches("ms").parse::<f32>().unwrap_or(9999.0);
-                    delay_a_num.partial_cmp(&delay_b_num).unwrap_or(std::cmp::Ordering::Equal)
-                },
-                _ => a.ip.cmp(&b.ip)
-            }
+            let delay_a = a.delay.trim_end_matches("ms").parse::<f32>().unwrap_or(9999.0);
+            let delay_b = b.delay.trim_end_matches("ms").parse::<f32>().unwrap_or(9999.0);
+            delay_a.partial_cmp(&delay_b).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for (index, info) in sorted_proxies.iter().enumerate() {
@@ -236,33 +236,19 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
             writeln!(file, "| **IP Address** | `{}` |", info.ip)?;
             
             // نمایش لوکیشن کامل
-            let location = format!("{} {} {}", 
-                info.countryflag.as_deref().unwrap_or("🌍"),
-                info.city.as_deref().unwrap_or("Unknown City"),
-                info.region.as_deref().unwrap_or("Unknown Region")
-            );
+            let location = format!("{} {}, {}", info.countryflag, info.city, info.region);
             writeln!(file, "| **Location** | {} |", location)?;
+            writeln!(file, "| **ISP** | {} |", info.isp)?;
+            writeln!(file, "| **ASN** | {} |", info.asn)?;
             
-            if let Some(isp) = &info.isp {
-                writeln!(file, "| **ISP** | {} |", isp)?;
-            }
+            // تشخیص سرعت براساس پینگ
+            let delay_num = info.delay.trim_end_matches("ms").parse::<f32>().unwrap_or(9999.0);
+            let speed_emoji = if delay_num < 50.0 { "🚀" }
+                else if delay_num < 150.0 { "⚡" }
+                else if delay_num < 300.0 { "🐌" }
+                else { "🦆" };
             
-            if let Some(asn) = &info.asn {
-                writeln!(file, "| **ASN** | {} |", asn)?;
-            }
-            
-            if let Some(delay) = &info.delay {
-                // تشخیص سرعت براساس پینگ
-                let speed_emoji = if let Ok(ping_num) = delay.trim_end_matches("ms").parse::<f32>() {
-                    if ping_num < 50.0 { "🚀" }
-                    else if ping_num < 150.0 { "⚡" }
-                    else if ping_num < 300.0 { "🐌" }
-                    else { "🦆" }
-                } else { "❓" };
-                
-                writeln!(file, "| **Ping** | {} {} |", speed_emoji, delay)?;
-            }
-            
+            writeln!(file, "| **Ping** | {} {} |", speed_emoji, info.delay)?;
             writeln!(file, "")?;
             
             // جداکننده بین پروکسی‌ها
@@ -306,77 +292,107 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
     Ok(proxies)
 }
 
-async fn check_proxy_with_multiple_services(proxy_ip: &str) -> Option<ProxyInfo> {
-    // لیست سرویس‌های مختلف برای تست
-    let services = [
-        "https://httpbin.org/ip",
-        "https://api.ipify.org?format=json",
-        "https://ipinfo.io/json",
-        "https://api.myip.com",
-    ];
-    
-    // ایجاد کلاینت reqwest با پروکسی
-    let proxy_url = format!("http://{}:443", proxy_ip);
-    
-    let client = match reqwest::Client::builder()
-        .proxy(reqwest::Proxy::http(&proxy_url).ok()?)
-        .timeout(Duration::from_secs(TIMEOUT_SECONDS))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return None,
-    };
+async fn check_connection(
+    host: &str,
+    path: &str,
+    proxy: Option<(&str, u16)>,
+) -> Result<Value> {
+    let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
-    // تست با سرویس‌های مختلف
-    for service_url in &services {
-        match client.get(*service_url).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    if let Ok(json) = response.json::<Value>().await {
-                        // پردازش پاسخ و ایجاد ProxyInfo
-                        return Some(create_proxy_info_from_response(proxy_ip, &json));
+    // بسته‌بندی کل عملیات در timeout
+    match tokio::time::timeout(timeout_duration, async {
+        // ساخت payload درخواست HTTP
+        let payload = format!(
+            "GET {} HTTP/1.1\r\n\
+             Host: {}\r\n\
+             User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+             (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n\
+             Accept: application/json, text/plain, */*\r\n\
+             Accept-Language: en-US,en;q=0.9\r\n\
+             Accept-Encoding: gzip, deflate, br\r\n\
+             Connection: close\r\n\r\n",
+            path, host
+        );
+
+        // ایجاد اتصال TCP
+        let stream = if let Some((proxy_ip, proxy_port)) = proxy {
+            let connect_addr = if proxy_ip.contains(':') {
+                format!("[{}]:{}", proxy_ip, proxy_port)
+            } else {
+                format!("{}:{}", proxy_ip, proxy_port)
+            };
+            TcpStream::connect(connect_addr).await?
+        } else {
+            TcpStream::connect(format!("{}:443", host)).await?
+        };
+
+        // ایجاد اتصال TLS
+        let native_connector = NativeTlsConnector::builder()
+            .danger_accept_invalid_certs(true) // قبول گواهی‌های نامعتبر
+            .build()?;
+        let tokio_connector = TokioTlsConnector::from(native_connector);
+
+        let mut tls_stream = tokio_connector.connect(host, stream).await?;
+
+        // ارسال درخواست HTTP
+        tls_stream.write_all(payload.as_bytes()).await?;
+
+        // خواندن پاسخ
+        let mut response = Vec::new();
+        let mut buffer = [0; 8192]; // افزایش سایز بافر
+
+        loop {
+            match tls_stream.read(&mut buffer).await {
+                Ok(0) => break, // پایان stream
+                Ok(n) => response.extend_from_slice(&buffer[..n]),
+                Err(e) => {
+                    return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>);
+                }
+            }
+        }
+
+        // پردازش پاسخ
+        let response_str = String::from_utf8_lossy(&response);
+
+        // جداسازی header و body
+        if let Some(body_start) = response_str.find("\r\n\r\n") {
+            let body = &response_str[body_start + 4..];
+
+            // تلاش برای parse کردن JSON
+            match serde_json::from_str::<Value>(body.trim()) {
+                Ok(json_data) => Ok(json_data),
+                Err(_) => {
+                    // اگر JSON نیست، تلاش برای استخراج IP از متن
+                    if let Some(ip_match) = extract_ip_from_text(body) {
+                        let json_obj = serde_json::json!({
+                            "ip": ip_match,
+                            "delay": "N/A",
+                            "isp": "Unknown ISP",
+                            "asn": "Unknown ASN",
+                            "city": "Unknown City",
+                            "region": "Unknown Region",
+                            "country": "Unknown",
+                            "countryflag": "🌍"
+                        });
+                        Ok(json_obj)
+                    } else {
+                        Err("Unable to parse response".into())
                     }
                 }
-            },
-            Err(_) => continue, // امتحان سرویس بعدی
+            }
+        } else {
+            Err("Invalid HTTP response format".into())
         }
-    }
-    
-    None
-}
-
-fn create_proxy_info_from_response(proxy_ip: &str, json_data: &Value) -> ProxyInfo {
-    ProxyInfo {
-        ip: proxy_ip.to_string(),
-        delay: Some("N/A".to_string()), // پینگ دقیق نیاز به تست جداگانه دارد
-        isp: json_data.get("org").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        asn: json_data.get("asn").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        city: json_data.get("city").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        region: json_data.get("region").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        country: json_data.get("country").and_then(|v| v.as_str()).map(|s| s.to_string()),
-        countryflag: json_data.get("country").and_then(|v| v.as_str()).map(|code| {
-            get_country_name(code).chars().take(2).collect()
-        }),
+    }).await {
+        Ok(inner_result) => inner_result,
+        Err(_) => Err(Box::new(io::Error::new(io::ErrorKind::TimedOut, "Connection timed out")) as Box<dyn std::error::Error + Send + Sync>),
     }
 }
 
-async fn test_proxy_ping(proxy_ip: &str) -> Option<String> {
-    let start = std::time::Instant::now();
-    
-    let proxy_url = format!("http://{}:443", proxy_ip);
-    let client = reqwest::Client::builder()
-        .proxy(reqwest::Proxy::http(&proxy_url).ok()?)
-        .timeout(Duration::from_secs(5))
-        .build()
-        .ok()?;
-
-    match client.get("https://httpbin.org/ip").send().await {
-        Ok(_) => {
-            let duration = start.elapsed();
-            Some(format!("{}ms", duration.as_millis()))
-        },
-        Err(_) => None,
-    }
+fn extract_ip_from_text(text: &str) -> Option<String> {
+    // RegEx ساده برای استخراج IP
+    let ip_pattern = regex::Regex::new(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b").ok()?;
+    ip_pattern.find(text).map(|m| m.as_str().to_string())
 }
 
 async fn process_proxy(
@@ -388,30 +404,55 @@ async fn process_proxy(
         return;
     }
     let ip = parts[0];
-    let _port = parts[1]; // پورت همیشه 443 است
+    let port = parts[1];
+    let full_proxy_address = format!("{}:{}", ip, port);
 
-    println!("🔍 Testing proxy: {}", ip);
+    // لیست سرویس‌های مختلف برای تست
+    let services = [
+        ("httpbin.org", "/ip"),
+        ("api.ipify.org", "/?format=json"),
+        ("ipinfo.io", "/json"),
+        ("icanhazip.com", "/"),
+    ];
 
-    // تست پروکسی با سرویس‌های مختلف
-    if let Some(mut proxy_info) = check_proxy_with_multiple_services(ip).await {
-        // تست پینگ جداگانه
-        if let Some(ping) = test_proxy_ping(ip).await {
-            proxy_info.delay = Some(ping);
+    for (host, path) in &services {
+        match check_connection(host, path, None).await {
+            Ok(proxy_data) => {
+                // تلاش برای deserialize کردن به ProxyInfo
+                let info = match serde_json::from_value::<ProxyInfo>(proxy_data.clone()) {
+                    Ok(info) => info,
+                    Err(_) => {
+                        // اگر format استاندارد نبود، یک ProxyInfo ساده بسازیم
+                        ProxyInfo {
+                            ip: ip.to_string(),
+                            delay: "N/A".to_string(),
+                            isp: proxy_data.get("org").and_then(|v| v.as_str()).unwrap_or("Unknown ISP").to_string(),
+                            asn: proxy_data.get("asn").and_then(|v| v.as_str()).unwrap_or("Unknown ASN").to_string(),
+                            city: proxy_data.get("city").and_then(|v| v.as_str()).unwrap_or("Unknown City").to_string(),
+                            region: proxy_data.get("region").and_then(|v| v.as_str()).unwrap_or("Unknown Region").to_string(),
+                            country: proxy_data.get("country").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
+                            countryflag: proxy_data.get("country").and_then(|v| v.as_str()).map(|code| {
+                                get_country_name(code).chars().take(2).collect()
+                            }).unwrap_or_else(|| "🌍".to_string()),
+                        }
+                    }
+                };
+
+                println!("🟢 PROXY LIVE: {} (Service: {})", info.ip, host);
+                let mut active_proxies_locked = active_proxies.lock().unwrap();
+
+                active_proxies_locked
+                    .entry(info.country.clone())
+                    .or_default()
+                    .push(info);
+                return; // موفق بود، نیازی به تست سرویس‌های دیگر نیست
+            },
+            Err(_) => {
+                continue; // این سرویس کار نکرد، سرویس بعدی را امتحان کن
+            }
         }
-
-        println!("🟢 PROXY LIVE: {} (Ping: {})", 
-            proxy_info.ip, 
-            proxy_info.delay.as_deref().unwrap_or("N/A")
-        );
-
-        let mut active_proxies_locked = active_proxies.lock().unwrap();
-        let country_code = proxy_info.country.clone().unwrap_or_else(|| "Unknown".to_string());
-
-        active_proxies_locked
-            .entry(country_code)
-            .or_default()
-            .push(proxy_info);
-    } else {
-        println!("🔴 PROXY DEAD: {}", ip);
     }
+
+    // اگر هیچ سرویسی کار نکرد
+    println!("🔴 PROXY DEAD: {}", full_proxy_address);
 }
