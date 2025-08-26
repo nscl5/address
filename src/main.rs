@@ -222,12 +222,15 @@ async fn process_proxy(
     proxy_line: String,
     active_proxies: &Arc<Mutex<HashMap<String, Vec<ProxyInfo>>>>,
 ) {
-    let ip = match proxy_line.split(',').next() {
-        Some(ip) => ip,
-        None => return,
-    };
+    let parts: Vec<&str> = proxy_line.split(',').collect();
+    if parts.len() < 2 {
+        return;
+    }
+    let ip = parts[0];
+    let port = parts[1];
+    let full_proxy_address = format!("{}:{}", ip, port);
 
-    let path = format!("/check?ip={}", ip);
+    let path = format!("/check?ip={}", full_proxy_address);
 
     match check_connection(IP_RESOLVER, &path, None).await {
         Ok(proxy_data) => {
@@ -244,13 +247,13 @@ async fn process_proxy(
                 },
                 Err(e) => {
                     // The API responded, but the JSON format did not match our ProxyInfo struct.
-                    println!("PROXY DEAD ❌ (JSON parsing error): {} - Error: {}, Response: {:?}", ip, e, proxy_data);
+                    println!("PROXY DEAD ❌ (JSON parsing error): {} - Error: {}, Response: {:?}", full_proxy_address, e, proxy_data);
                 }
             }
         },
         Err(e) => {
             // The connection to the API failed (e.g., timeout).
-            println!("PROXY DEAD ⏱️ (Error checking): {} - {}", ip, e);
+            println!("PROXY DEAD ⏱️ (Error checking): {} - {}", full_proxy_address, e);
         }
     }
 }
