@@ -7,14 +7,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::StreamExt;
-use native_tls::TlsConnector as NativeTlsConnector; // Renamed to avoid conflict
+use native_tls::TlsConnector as NativeTlsConnector;
 use serde_json::Value;
-use tokio::io::{AsyncReadExt, AsyncWriteExt}; // Untuk read_exact, write_all async
-use tokio::net::TcpStream; // TcpStream async dari Tokio
-use tokio_native_tls::TlsConnector as TokioTlsConnector; // Konektor TLS async
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
 const IP_RESOLVER: &str = "proxy.ndeso.xyz";
-const PROXY_FILE: &str = "Data/Proxy-September.txt"; //input
+const PROXY_FILE: &str = "Data/test.txt";
 const OUTPUT_FILE: &str = "active_proxies.md";
 const MAX_CONCURRENT: usize = 175;
 const TIMEOUT_SECONDS: u64 = 9;
@@ -96,12 +96,19 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
         writeln!(file, "## {}", country_name)?;
         if let Some(proxies) = proxies_by_country.get(country_name) {
             for info in proxies {
-                writeln!(file, "Location: {} {}", info.countryflag, info.region)?;
-                writeln!(file, "City: {}", info.city)?;
-                writeln!(file, "ISP: {} – ${}", info.isp, info.asn)?;
+                writeln!(file, "**proxyIP:**")?;
+                writeln!(file, "")?;
+                writeln!(file, "```yaml   ")?;
+                writeln!(file, "{}", info.ip)?;
+                writeln!(file, "```")?;
+                writeln!(file, "")?;
+                writeln!(file, "**Location:** {} {} {}", info.countryflag, info.region, info.city)?;
+                writeln!(file, "")?;
+                writeln!(file, "**ISP**: {} –– ", info.isp)?;
+                writeln!(file, "**ISP**: {} –– ", info.asn)?;
                 writeln!(file, "Ping: {}", info.delay)?;
-                writeln!(file, "proxyIP: {}", info.ip)?;
-                writeln!(file, "")?; // Add a blank line between entries
+                
+                writeln!(file, "")?;
             }
         }
     }
