@@ -289,10 +289,11 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
-    // First, we run the timeout operation and store its result in a variable.
-    // The `.await` happens here, and the semicolon at the end is important.
+    // Step 1: Run the asynchronous operation with a timeout and store its result in a variable.
+    // The `.await` happens here.
     let result = tokio::time::timeout(timeout_duration, async {
-        // ایجاد HTTP request برای تست
+        // All the connection logic is inside this async block.
+        // This block must return a Result that the timeout can wrap.
         let payload = format!(
             "GET {} HTTP/1.1\r\n\
              Host: {}\r\n\
@@ -305,7 +306,6 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
             TEST_PATH, TEST_TARGET
         );
 
-        // اتصال به پروکسی
         let connect_addr = if proxy_ip.contains(':') {
             format!("[{}]:{}", proxy_ip, proxy_port)
         } else {
@@ -314,7 +314,6 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
 
         let stream = TcpStream::connect(connect_addr).await?;
 
-        // ایجاد اتصال TLS
         let native_connector = NativeTlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()?;
@@ -322,10 +321,8 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
 
         let mut tls_stream = tokio_connector.connect(TEST_TARGET, stream).await?;
 
-        // ارسال درخواست
         tls_stream.write_all(payload.as_bytes()).await?;
 
-        // خواندن پاسخ
         let mut response = Vec::new();
         let mut buffer = [0; 4096];
 
@@ -339,24 +336,23 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
 
         let response_str = String::from_utf8_lossy(&response);
 
-        // بررسی موفقیت‌آمیز بودن پاسخ
         if response_str.contains("200 OK") || response_str.contains("origin") {
             let elapsed = start_time.elapsed().as_millis() as f64;
             Ok((true, elapsed))
         } else {
             Err("Invalid response".into())
         }
-    }).await;
+    }).await; // The async operation ends here.
 
-    // Now, we match on the `result` variable. This is cleaner and avoids syntax errors.
+    // Step 2: Now, handle the result with a clean `match` statement.
     match result {
-        // Case 1: The operation finished within the timeout AND was successful.
+        // Ok(Ok(...)) => The operation finished in time and was successful.
         Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
 
-        // Case 2: The operation finished within the timeout but resulted in an error.
+        // Ok(Err(...)) => The operation finished in time but returned an error.
         Ok(Err(e)) => Err(e),
 
-        // Case 3: The operation did not finish in time (it timed out).
+        // Err(_) => The operation timed out.
         Err(_) => Ok((false, -1.0)),
     }
 }
