@@ -345,7 +345,7 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     }).await {
         Ok(Ok(_)) => {
             let elapsed = start_time.elapsed().as_millis() as f64;
-            Ok((true, elapsed))
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(true)
         },
         _ => Ok((false, -1.0))
     }
@@ -433,6 +433,7 @@ async fn process_proxy(
                     if ip_info.status == "success" {
                         let proxy_info = ProxyInfo {
                             ip: ip.to_string(),
+                            delay: format!("{:.0}ms", response_time),
                             isp: ip_info.isp.unwrap_or_else(|| "Unknown ISP".to_string()),
                             asn: ip_info.asn.unwrap_or_else(|| "Unknown ASN".to_string()),
                             city: ip_info.city.unwrap_or_else(|| "Unknown City".to_string()),
