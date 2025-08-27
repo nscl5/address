@@ -134,7 +134,7 @@ struct ProxyInfo {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("🔎 Starting advanced proxy scanner...");
+    println!("🚀 Starting advanced proxy scanner...");
 
     if let Some(parent) = Path::new(OUTPUT_FILE).parent() {
         fs::create_dir_all(parent)?;
@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
 
     write_markdown_file(&active_proxies.lock().unwrap())?;
 
-    println!("🟢 Proxy checking completed.");
+    println!("✅ Proxy checking completed.");
     Ok(())
 }
 
@@ -192,10 +192,10 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
     writeln!(file, "")?;
     
     if proxies_by_country.is_empty() {
-        writeln!(file, "## 🔴 No Active Proxies Found")?;
+        writeln!(file, "## ❌ No Active Proxies Found")?;
         writeln!(file, "")?;
         writeln!(file, "No working proxies were detected during the scan.")?;
-        println!("🔴 No active proxies found");
+        println!("❌ No active proxies found");
         return Ok(());
     }
 
@@ -224,7 +224,7 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
         });
 
         for (index, info) in sorted_proxies.iter().enumerate() {
-            writeln!(file, "### 🪄 Proxy #{}", index + 1)?;
+            writeln!(file, "### 📍 Proxy #{}", index + 1)?;
             writeln!(file, "")?;
             writeln!(file, "| Field | Value |")?;
             writeln!(file, "|-------|-------|")?;
@@ -234,8 +234,8 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
             writeln!(file, "| **ASN** | {} |", info.asn)?;
             
             // تشخیص سرعت براساس response time
-            let speed_emoji = if info.response_time < 200.0 { "⚡" }
-                else if info.response_time < 500.0 { "🌟" }
+            let speed_emoji = if info.response_time < 200.0 { "🚀" }
+                else if info.response_time < 500.0 { "⚡" }
                 else if info.response_time < 1000.0 { "🐌" }
                 else { "🦆" };
             
@@ -259,7 +259,7 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
     writeln!(file, "")?;
     writeln!(file, "- All proxies tested on port 443 (HTTPS)")?;
     writeln!(file, "- Timeout: {} seconds", TIMEOUT_SECONDS)?;
-    writeln!(file, "- Speed indicators: ⚡ Fast (<200ms) | 🌟 Good (<500ms) | 🐌 Slow (<1000ms) | 🦆 Very Slow (>1000ms)")?;
+    writeln!(file, "- Speed indicators: 🚀 Fast (<200ms) | ⚡ Good (<500ms) | 🐌 Slow (<1000ms) | 🦆 Very Slow (>1000ms)")?;
     writeln!(file, "- Geolocation data provided by ip-api.com")?;
     writeln!(file, "")?;
     writeln!(file, "---")?;
@@ -303,6 +303,7 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
             TEST_PATH, TEST_TARGET
         );
 
+        // اتصال به پروکسی
         let connect_addr = if proxy_ip.contains(':') {
             format!("[{}]:{}", proxy_ip, proxy_port)
         } else {
@@ -343,10 +344,7 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
             Err("Invalid response".into())
         }
     }).await {
-        Ok(Ok(_)) => {
-            let elapsed = start_time.elapsed().as_millis() as f64;
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(true)
-        },
+        Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
         _ => Ok((false, -1.0))
     }
 }
@@ -356,8 +354,6 @@ async fn get_ip_info(ip: &str) -> Result<IpApiResponse> {
     let timeout_duration = Duration::from_secs(10);
     
     match tokio::time::timeout(timeout_duration, async {
-        
-        // ایجاد HTTP request برای ip-api
         let host = "ip-api.com";
         let path = format!("/json/{}?lang=en", ip);
         
@@ -424,10 +420,12 @@ async fn process_proxy(
 
     println!("🔍 Testing proxy: {}:{}", ip, port);
 
+    // تست اتصال پروکسی
     match test_proxy_connection(ip, port).await {
         Ok((true, response_time)) => {
-            println!("✔️ Connection successful for {}, getting IP info...", ip);
+            println!("✅ Connection successful for {}, getting IP info...", ip);
             
+            // دریافت اطلاعات IP
             match get_ip_info(ip).await {
                 Ok(ip_info) => {
                     if ip_info.status == "success" {
@@ -448,7 +446,7 @@ async fn process_proxy(
                             &proxy_info.country
                         );
 
-                        println!("🟢 PROXY LIVE: {} ({:.0}ms) - {}", 
+                        println!("✅ PROXY LIVE: {} ({:.0}ms) - {}", 
                             proxy_info.ip, 
                             response_time,
                             country_key
@@ -460,11 +458,11 @@ async fn process_proxy(
                             .or_default()
                             .push(proxy_info);
                     } else {
-                        println!("🔴 IP info failed for {}: Invalid status", ip);
+                        println!("❌ IP info failed for {}: Invalid status", ip);
                     }
                 },
                 Err(e) => {
-                    println!("🔴 Failed to get IP info for {}: {}", ip, e);
+                    println!("❌ Failed to get IP info for {}: {}", ip, e);
                 }
             }
         },
