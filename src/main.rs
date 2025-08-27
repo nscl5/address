@@ -8,7 +8,6 @@ use std::time::{Duration, Instant};
 
 use futures::StreamExt;
 use native_tls::TlsConnector as NativeTlsConnector;
-use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_native_tls::TlsConnector as TokioTlsConnector;
@@ -346,7 +345,7 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     }).await {
         Ok(Ok(_)) => {
             let elapsed = start_time.elapsed().as_millis() as f64;
-            Ok((true, elapsed))
+            Ok::<bool, Box<dyn std::error::Error + Send + Sync>>(true)
         },
         _ => Ok((false, -1.0))
     }
@@ -357,7 +356,6 @@ async fn get_ip_info(ip: &str) -> Result<IpApiResponse> {
     let timeout_duration = Duration::from_secs(10);
     
     match tokio::time::timeout(timeout_duration, async {
-        let url = format!("http://ip-api.com/json/{}?lang=en", ip);
         
         // ایجاد HTTP request برای ip-api
         let host = "ip-api.com";
