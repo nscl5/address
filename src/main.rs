@@ -289,11 +289,9 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
-    // Step 1: Run the asynchronous operation with a timeout and store its result in a variable.
-    // The `.await` happens here.
+    // KEY FIX: The async operation is run and awaited first, and its result is
+    // stored in a variable. Note the semicolon at the end of this block.
     let result = tokio::time::timeout(timeout_duration, async {
-        // All the connection logic is inside this async block.
-        // This block must return a Result that the timeout can wrap.
         let payload = format!(
             "GET {} HTTP/1.1\r\n\
              Host: {}\r\n\
@@ -342,17 +340,18 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
         } else {
             Err("Invalid response".into())
         }
-    }).await; // The async operation ends here.
+    }).await; // The operation is awaited and the statement ends here.
 
-    // Step 2: Now, handle the result with a clean `match` statement.
+    // Now, a separate and clean `match` statement handles the result.
+    // This simple structure will not confuse the compiler.
     match result {
-        // Ok(Ok(...)) => The operation finished in time and was successful.
+        // Operation succeeded within the time limit.
         Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
 
-        // Ok(Err(...)) => The operation finished in time but returned an error.
+        // Operation failed within the time limit.
         Ok(Err(e)) => Err(e),
 
-        // Err(_) => The operation timed out.
+        // Operation timed out.
         Err(_) => Ok((false, -1.0)),
     }
 }
