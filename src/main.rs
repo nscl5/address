@@ -289,7 +289,8 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
-    // First, await the result of the timeout operation and store it in a variable
+    // First, we run the timeout operation and store its result in a variable.
+    // The `.await` happens here, and the semicolon at the end is important.
     let result = tokio::time::timeout(timeout_duration, async {
         // ایجاد HTTP request برای تست
         let payload = format!(
@@ -337,7 +338,7 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
         }
 
         let response_str = String::from_utf8_lossy(&response);
-        
+
         // بررسی موفقیت‌آمیز بودن پاسخ
         if response_str.contains("200 OK") || response_str.contains("origin") {
             let elapsed = start_time.elapsed().as_millis() as f64;
@@ -347,13 +348,15 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
         }
     }).await;
 
-    // Now, match on the result we stored
+    // Now, we match on the `result` variable. This is cleaner and avoids syntax errors.
     match result {
-        // Case 1: Timeout completed and the inner async block succeeded
+        // Case 1: The operation finished within the timeout AND was successful.
         Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
-        // Case 2: Timeout completed but the inner async block failed
+
+        // Case 2: The operation finished within the timeout but resulted in an error.
         Ok(Err(e)) => Err(e),
-        // Case 3: The operation timed out
+
+        // Case 3: The operation did not finish in time (it timed out).
         Err(_) => Ok((false, -1.0)),
     }
 }
