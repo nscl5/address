@@ -7,11 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::StreamExt;
-use native_tls::TlsConnector as NativeTlsConnector;
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_native_tls::TlsConnector as TokioTlsConnector;
 
 const IP_RESOLVER: &str = "ip-api.com";
 const PROXY_FILE: &str = "Data/test.txt";
@@ -165,6 +163,7 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
     Ok(proxies)
 }
 
+
 async fn check_connection(
     host: &str,
     path: &str,
@@ -180,10 +179,9 @@ async fn check_connection(
             path, host
         );
 
-        let stream = TcpStream::connect(format!("{}:80", host)).await?;
-        let mut stream = stream;
-
+        let mut stream = TcpStream::connect(format!("{}:80", host)).await?;
         stream.write_all(payload.as_bytes()).await?;
+
         let mut response = Vec::new();
         let mut buffer = [0; 4096];
 
@@ -200,14 +198,14 @@ async fn check_connection(
             let body = &response_str[body_start + 4..];
             match serde_json::from_str::<Value>(body.trim()) {
                 Ok(json_data) => Ok(json_data),
-                Err(e) => Err(Box::new(e)),
+                Err(e) => Err(Box::new(e)),   // ✅ درست شد
             }
         } else {
-            Err("Invalid HTTP response".into())
+            Err("Invalid HTTP response".into())  // ✅ حالا Box<dyn Error> میشه
         }
     }).await {
-        Ok(inner_result) => inner_result,
-        Err(_) => Err(Box::new(io::Error::new(io::ErrorKind::TimedOut, "Connection attempt timed out"))),
+        Ok(inner_result) => inner_result, // اینجا هم inner_result خودش Result<Value, Box<dyn Error>> هست
+        Err(_) => Err("Connection attempt timed out".into()),  // ✅
     }
 }
 
