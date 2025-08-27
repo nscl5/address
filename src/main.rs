@@ -18,17 +18,18 @@ const MAX_CONCURRENT: usize = 150;
 const TIMEOUT_SECONDS: u64 = 9;
 
 const GOOD_ISPS: &[&str] = &[
-    "Google",
-    "Amazon",
-    "Cloudflare",
-    "Hetzner",
-    "DigitalOcean",
-    "Rackspace",
-    "M247",
-    "DataCamp",
-    "Total Uptime",
-    "GmbH",
-    "Stark Industries",
+    "google",
+    "amazon",
+    "cloudflare",
+    "microsoft",
+    "hetzner",
+    "digitalocean",
+    "rackspace",
+    "m247",
+    "datacamp",
+    "total uptime",
+    "gmbh",
+    "stark industries",
 ];
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -64,12 +65,18 @@ async fn main() -> Result<()> {
                 return false;
             }
             let port_ok = parts[1].trim() == "443";
-            let isp_name = parts[3].to_string();
-            let isp_ok = GOOD_ISPS.iter().any(|kw| isp_name.contains(kw));
+
+            let isp_name = parts[3].to_lowercase();
+            let isp_ok = GOOD_ISPS.iter().any(|kw| isp_name.contains(&kw.to_lowercase()));
+
             port_ok && isp_ok
         })
         .collect();
-    println!("Filtered to {} good proxies (port 443 + ISP whitelist)", proxies.len());
+
+    println!(
+        "Filtered to {} good proxies (port 443 + ISP whitelist)",
+        proxies.len()
+    );
 
     let active_proxies = Arc::new(Mutex::new(HashMap::<String, Vec<ProxyInfo>>::new()));
 
@@ -79,7 +86,7 @@ async fn main() -> Result<()> {
             async move {
                 process_proxy(proxy_line, &active_proxies).await;
             }
-        })
+        }),
     )
     .buffer_unordered(MAX_CONCURRENT)
     .collect::<Vec<()>>();
@@ -122,10 +129,7 @@ fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<ProxyInfo>>) -> 
                 writeln!(
                     file,
                     "| `{}` | {} | {} | {} | ok |",
-                    info.query,
-                    location,
-                    info.isp,
-                    info.asn
+                    info.query, location, info.isp, info.asn
                 )?;
             }
             writeln!(file, "\n---\n")?;
@@ -140,7 +144,9 @@ fn country_flag(code: &str) -> String {
     code.chars()
         .filter_map(|c| {
             if c.is_ascii_alphabetic() {
-                Some(char::from_u32(0x1F1E6 + (c.to_ascii_uppercase() as u32 - 'A' as u32)).unwrap())
+                Some(char::from_u32(
+                    0x1F1E6 + (c.to_ascii_uppercase() as u32 - 'A' as u32),
+                ).unwrap())
             } else {
                 None
             }
@@ -163,11 +169,7 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
     Ok(proxies)
 }
 
-
-async fn check_connection(
-    host: &str,
-    path: &str,
-) -> Result<Value> {
+async fn check_connection(host: &str, path: &str) -> Result<Value> {
     let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
     match tokio::time::timeout(timeout_duration, async {
@@ -189,7 +191,7 @@ async fn check_connection(
             match stream.read(&mut buffer).await {
                 Ok(0) => break,
                 Ok(n) => response.extend_from_slice(&buffer[..n]),
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => return Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
             }
         }
 
@@ -198,14 +200,18 @@ async fn check_connection(
             let body = &response_str[body_start + 4..];
             match serde_json::from_str::<Value>(body.trim()) {
                 Ok(json_data) => Ok(json_data),
-                Err(e) => Err(Box::new(e)),   // ✅ درست شد
+                Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
             }
         } else {
-            Err("Invalid HTTP response".into())  // ✅ حالا Box<dyn Error> میشه
+            Err(Box::<dyn std::error::Error + Send + Sync>::from(
+                "Invalid HTTP response",
+            ))
         }
     }).await {
-        Ok(inner_result) => inner_result, // اینجا هم inner_result خودش Result<Value, Box<dyn Error>> هست
-        Err(_) => Err("Connection attempt timed out".into()),  // ✅
+        Ok(inner_result) => inner_result,
+        Err(_) => Err(Box::<dyn std::error::Error + Send + Sync>::from(
+            "Connection attempt timed out",
+        )),
     }
 }
 
@@ -222,23 +228,21 @@ async fn process_proxy(
     let path = format!("/json/{}", ip);
 
     match check_connection(IP_RESOLVER, &path).await {
-        Ok(proxy_data) => {
-            match serde_json::from_value::<ProxyInfo>(proxy_data.clone()) {
-                Ok(info) => {
-                    println!("PROXY LIVE ✅: {}", info.query);
-                    let mut active_proxies_locked = active_proxies.lock().unwrap();
-                    active_proxies_locked
-                        .entry(info.country.clone())
-                        .or_default()
-                        .push(info);
-                },
-                Err(_) => {
-                    println!("PROXY DEAD ❌ (Invalid JSON): {}", ip);
-                }
+        Ok(proxy_data) => match serde_json::from_value::<ProxyInfo>(proxy_data.clone()) {
+            Ok(info) => {
+                println!("PROXY LIVE ✅: {}", info.query);
+                let mut active_proxies_locked = active_proxies.lock().unwrap();
+                active_proxies_locked
+                    .entry(info.country.clone())
+                    .or_default()
+                    .push(info);
+            }
+            Err(_) => {
+                println!("PROXY DEAD ❌ (Invalid JSON): {}", ip);
             }
         },
-        Err(_) => {
-            println!("PROXY DEAD ⏱️ (Timeout): {}", ip);
+        Err(e) => {
+            println!("PROXY DEAD ⏱️ ({}): {}", ip, e);
         }
     }
 }
