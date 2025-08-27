@@ -339,6 +339,27 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
         
         // بررسی موفقیت‌آمیز بودن پاسخ
         if response_str.contains("200 OK") || response_str.contains("origin") {
+            // FIX: Calculate elapsed time and return it in a tuple
+            let elapsed = start_time.elapsed().as_millis() as f64;
+            Ok((true, elapsed))
+        } else {
+            Err("Invalid response".into())
+        }
+    }).await {
+        // FIX: Handle all cases: success, inner error, and timeout
+        // Case 1: Timeout completed and the inner async block succeeded
+        Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
+        // Case 2: Timeout completed but the inner async block failed
+        Ok(Err(e)) => Err(e),
+        // Case 3: The operation timed out
+        Err(_) => Ok((false, -1.0)),
+    }
+}
+
+        let response_str = String::from_utf8_lossy(&response);
+        
+        // بررسی موفقیت‌آمیز بودن پاسخ
+        if response_str.contains("200 OK") || response_str.contains("origin") {
             Ok(true)
         } else {
             Err("Invalid response".into())
