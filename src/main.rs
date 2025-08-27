@@ -289,7 +289,8 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
 
-    match tokio::time::timeout(timeout_duration, async {
+    // First, await the result of the timeout operation and store it in a variable
+    let result = tokio::time::timeout(timeout_duration, async {
         // ایجاد HTTP request برای تست
         let payload = format!(
             "GET {} HTTP/1.1\r\n\
@@ -339,14 +340,15 @@ async fn test_proxy_connection(proxy_ip: &str, proxy_port: u16) -> Result<(bool,
         
         // بررسی موفقیت‌آمیز بودن پاسخ
         if response_str.contains("200 OK") || response_str.contains("origin") {
-            // FIX: Calculate elapsed time and return it in a tuple
             let elapsed = start_time.elapsed().as_millis() as f64;
             Ok((true, elapsed))
         } else {
             Err("Invalid response".into())
         }
-    }).await {
-        // FIX: Handle all cases: success, inner error, and timeout
+    }).await;
+
+    // Now, match on the result we stored
+    match result {
         // Case 1: Timeout completed and the inner async block succeeded
         Ok(Ok((success, elapsed))) => Ok((success, elapsed)),
         // Case 2: Timeout completed but the inner async block failed
