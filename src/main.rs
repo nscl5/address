@@ -10,16 +10,15 @@ use std::time::{Duration, Instant};
 
 use colored::*;
 use futures::StreamExt;
-use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
-const DEFAULT_OUTPUT_FILE: &str = "sub/ProxyIP.md";
+const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
 const DEFAULT_MAX_CONCURRENT: usize = 150;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 9;
-const REQUEST_DELAY_MS: u64 = 100;
+const REQUEST_DELAY_MS: u64 = 100; // Delay بین درخواست‌ها برای جلوگیری از rate limit
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
@@ -39,7 +38,7 @@ const GOOD_ISPS: &[&str] = &[
     "ByteDance",
     "Starlink",
     "3NT SOLUTION",
-    "WorkTitans B.V",
+    "WorkTitans B.V.",
     "PQ Hosting",
     "The constant company",
     "G-Core",
@@ -47,7 +46,7 @@ const GOOD_ISPS: &[&str] = &[
     "stark industries",
 ];
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(name = "Proxy Checker")]
 #[command(about = "Checks proxies and outputs active ones")]
 struct Args {
@@ -92,6 +91,7 @@ struct ProxyInfo {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Create output directory if needed
     if let Some(parent) = Path::new(&args.output_file).parent() {
         fs::create_dir_all(parent).context("Failed to create output directory")?;
     }
@@ -101,6 +101,7 @@ async fn main() -> Result<()> {
         .context("Failed to read proxy file")?;
     println!("Loaded {} proxies from file", proxies.len());
 
+    // Filter proxies: only port 443 and good ISPs
     let proxies: Vec<String> = proxies
         .into_iter()
         .filter(|line| {
@@ -123,7 +124,7 @@ async fn main() -> Result<()> {
             let active_proxies = Arc::clone(&active_proxies);
             let args = args.clone();
             async move {
-                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
+                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await; /
                 process_proxy(proxy_line, &active_proxies, &args).await;
             }
         })
@@ -222,6 +223,7 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
 }
 
 async fn check_connection(proxy_ip: &str) -> Result<u128> {
+    // تست واقعی پروکسی: ارسال درخواست به یک URL تست از طریق پروکسی
     let proxy_url = format!("http://{}:443", proxy_ip);
     let client = reqwest::Client::builder()
         .proxy(reqwest::Proxy::http(&proxy_url)?)
