@@ -15,8 +15,8 @@ const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
 const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
 const DEFAULT_MAX_CONCURRENT: usize = 150;
-const DEFAULT_TIMEOUT_SECONDS: u64 = 5; // کاهش timeout برای سریع‌تر بودن
-const REQUEST_DELAY_MS: u64 = 50; // کاهش delay برای سرعت بیشتر
+const DEFAULT_TIMEOUT_SECONDS: u64 = 5;
+const REQUEST_DELAY_MS: u64 = 50;
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
@@ -80,7 +80,6 @@ struct ProxyInfo {
     regionName: String,
     country: String,
     countryCode: String,
-    // Placeholder for future use
     #[serde(default)]
     proxy_type: String,
 }
@@ -89,7 +88,6 @@ struct ProxyInfo {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Create output directory if needed
     if let Some(parent) = Path::new(&args.output_file).parent() {
         fs::create_dir_all(parent).context("Failed to create output directory")?;
     }
@@ -99,7 +97,6 @@ async fn main() -> Result<()> {
         .context("Failed to read proxy file")?;
     println!("Loaded {} proxies from file", proxies.len());
 
-    // Filter proxies: only port 443 and good ISPs
     let proxies: Vec<String> = proxies
         .into_iter()
         .filter(|line| {
@@ -141,7 +138,7 @@ async fn main() -> Result<()> {
 
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
-    writeln!(file, "# 🚀 Active Proxies Report\n")?;
+    writeln!(file, "# 🌠 Active Proxies Report\n")?;
 
     let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
     let total_countries = proxies_by_country.len();
@@ -188,7 +185,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
                 emoji
             )?;
         }
-        writeln!(file, "\n</details>\n---\n")?;
+        writeln!(file, "\n</details>\n\n---\n")?;  // اضافه کردن خط خالی بیشتر برای جدا کردن درست ---
     }
 
     println!("All active proxies saved to {}", output_file);
@@ -223,7 +220,6 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
 }
 
 async fn check_connection(proxy_ip: &str) -> Result<u128> {
-    // تست سریع پینگ: اتصال TCP به پورت 443 برای اندازه‌گیری زمان handshake
     let start = Instant::now();
     match tokio::time::timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS), tokio::net::TcpStream::connect(format!("{}:443", proxy_ip))).await {
         Ok(Ok(_stream)) => {
@@ -268,7 +264,7 @@ async fn process_proxy(
                 .push((info, ping));
         }
         Err(e) => {
-            println!("PROXY DEAD 🦖: {} ({})", ip, e);
+            println!("PROXY DEAD 🪧: {} ({})", ip, e);
         }
     }
 }
