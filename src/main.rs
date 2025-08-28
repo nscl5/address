@@ -15,8 +15,8 @@ const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
 const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
 const DEFAULT_MAX_CONCURRENT: usize = 150;
-const DEFAULT_TIMEOUT_SECONDS: u64 = 9;
-const REQUEST_DELAY_MS: u64 = 100; // Delay بین درخواست‌ها برای جلوگیری از rate limit
+const DEFAULT_TIMEOUT_SECONDS: u64 = 5; // کاهش timeout برای سریع‌تر بودن
+const REQUEST_DELAY_MS: u64 = 50; // کاهش delay برای سرعت بیشتر
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
@@ -169,7 +169,9 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         }
 
         let flag = country_flag(&proxies[0].0.countryCode);
-        writeln!(file, "## {} {} ({} proxies)\n", flag, country_name, proxies.len())?;
+        writeln!(file, "## {} {} ({} proxies)", flag, country_name, proxies.len())?;
+        writeln!(file, "<details open>")?;
+        writeln!(file, "<summary>Click to collapse</summary>\n")?;
         writeln!(file, "| IP | Location | ISP | Ping |")?;
         writeln!(file, "|----|----------|-------|----|")?;
 
@@ -186,7 +188,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
                 emoji
             )?;
         }
-        writeln!(file, "\n---\n")?;
+        writeln!(file, "\n</details>\n---\n")?;
     }
 
     println!("All active proxies saved to {}", output_file);
@@ -221,20 +223,15 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
 }
 
 async fn check_connection(proxy_ip: &str) -> Result<u128> {
-    // تست واقعی پروکسی: ارسال درخواست به یک URL تست از طریق پروکسی
-    let proxy_url = format!("http://{}:443", proxy_ip);
-    let client = reqwest::Client::builder()
-        .proxy(reqwest::Proxy::http(&proxy_url)?)
-        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS))
-        .build()?;
-
+    // تست سریع پینگ: اتصال TCP به پورت 443 برای اندازه‌گیری زمان handshake
     let start = Instant::now();
-    let resp = client.get("https://httpbin.org/ip").send().await?;
-    if resp.status().is_success() {
-        let elapsed = start.elapsed().as_millis();
-        Ok(elapsed)
-    } else {
-        Err(anyhow::anyhow!("Proxy test failed with status: {}", resp.status()))
+    match tokio::time::timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS), tokio::net::TcpStream::connect(format!("{}:443", proxy_ip))).await {
+        Ok(Ok(_stream)) => {
+            let elapsed = start.elapsed().as_millis();
+            Ok(elapsed)
+        }
+        Ok(Err(e)) => Err(anyhow::anyhow!("Connection failed: {}", e)),
+        Err(_) => Err(anyhow::anyhow!("Connection timed out")),
     }
 }
 
