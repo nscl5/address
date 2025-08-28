@@ -15,15 +15,13 @@ const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
 const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
 const DEFAULT_MAX_CONCURRENT: usize = 150;
-const DEFAULT_TIMEOUT_SECONDS: u64 = 5;
-const REQUEST_DELAY_MS: u64 = 50;
+const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
+const REQUEST_DELAY_MS: u64 = 500;
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
     "Amazon",
     "Cloudflare",
-    "Hetzner",
-    "DigitalOcean",
     "Rackspace",
     "M247",
     "DataCamp",
@@ -138,7 +136,7 @@ async fn main() -> Result<()> {
 
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
-    writeln!(file, "# 🌠 Active Proxies Report\n")?;
+    writeln!(file, "# 🗺️ Active Proxies\n")?;
 
     let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
     let total_countries = proxies_by_country.len();
