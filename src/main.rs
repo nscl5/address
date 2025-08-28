@@ -1,5 +1,7 @@
+use anyhow::{Context, Result};
+use clap::Parser;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
@@ -12,11 +14,12 @@ use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-const IP_RESOLVER: &str = "ip-api.com";
-const PROXY_FILE: &str = "Data/test.txt";
-const OUTPUT_FILE: &str = "active_proxies.md";
-const MAX_CONCURRENT: usize = 150;
-const TIMEOUT_SECONDS: u64 = 9;
+const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
+const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
+const DEFAULT_OUTPUT_FILE: &str = "sub/ProxyIP.md";
+const DEFAULT_MAX_CONCURRENT: usize = 150;
+const DEFAULT_TIMEOUT_SECONDS: u64 = 9;
+const REQUEST_DELAY_MS: u64 = 100;
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
@@ -36,7 +39,7 @@ const GOOD_ISPS: &[&str] = &[
     "ByteDance",
     "Starlink",
     "3NT SOLUTION",
-    "WorkTitans B.V.",
+    "WorkTitans B.V",
     "PQ Hosting",
     "The constant company",
     "G-Core",
@@ -44,7 +47,30 @@ const GOOD_ISPS: &[&str] = &[
     "stark industries",
 ];
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+#[derive(Parser)]
+#[command(name = "Proxy Checker")]
+#[command(about = "Checks proxies and outputs active ones")]
+struct Args {
+    /// Path to the proxy file
+    #[arg(short, long, default_value = DEFAULT_PROXY_FILE)]
+    proxy_file: String,
+
+    /// Output file path
+    #[arg(short, long, default_value = DEFAULT_OUTPUT_FILE)]
+    output_file: String,
+
+    /// IP resolver URL
+    #[arg(long, default_value = DEFAULT_IP_RESOLVER)]
+    ip_resolver: String,
+
+    /// Max concurrent tasks
+    #[arg(long, default_value_t = DEFAULT_MAX_CONCURRENT)]
+    max_concurrent: usize,
+
+    /// Timeout in seconds
+    #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECONDS)]
+    timeout: u64,
+}
 
 #[derive(Deserialize, Debug, Clone)]
 struct ProxyInfo {
@@ -57,16 +83,22 @@ struct ProxyInfo {
     regionName: String,
     country: String,
     countryCode: String,
+    // Placeholder for future use
+    #[serde(default)]
+    proxy_type: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    if let Some(parent) = Path::new(OUTPUT_FILE).parent() {
-        fs::create_dir_all(parent)?;
-    }
-    File::create(OUTPUT_FILE)?;
+    let args = Args::parse();
 
-    let proxies = read_proxy_file(PROXY_FILE)?;
+    if let Some(parent) = Path::new(&args.output_file).parent() {
+        fs::create_dir_all(parent).context("Failed to create output directory")?;
+    }
+    File::create(&args.output_file).context("Failed to create output file")?;
+
+    let proxies = read_proxy_file(&args.proxy_file)
+        .context("Failed to read proxy file")?;
     println!("Loaded {} proxies from file", proxies.len());
 
     let proxies: Vec<String> = proxies
@@ -84,68 +116,81 @@ async fn main() -> Result<()> {
         .collect();
     println!("Filtered to {} good proxies (port 443 + ISP whitelist)", proxies.len());
 
-    let active_proxies = Arc::new(Mutex::new(HashMap::<String, Vec<(ProxyInfo, u128)>>::new()));
+    let active_proxies = Arc::new(Mutex::new(BTreeMap::<String, Vec<(ProxyInfo, u128)>>::new()));
 
     let tasks = futures::stream::iter(
         proxies.into_iter().map(|proxy_line| {
             let active_proxies = Arc::clone(&active_proxies);
+            let args = args.clone();
             async move {
-                process_proxy(proxy_line, &active_proxies).await;
+                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
+                process_proxy(proxy_line, &active_proxies, &args).await;
             }
         })
     )
-    .buffer_unordered(MAX_CONCURRENT)
+    .buffer_unordered(args.max_concurrent)
     .collect::<Vec<()>>();
 
     tasks.await;
 
-    write_markdown_file(&active_proxies.lock().unwrap())?;
+    write_markdown_file(&active_proxies.lock().unwrap(), &args.output_file)
+        .context("Failed to write Markdown file")?;
 
     println!("Proxy checking completed.");
     Ok(())
 }
 
-fn write_markdown_file(proxies_by_country: &HashMap<String, Vec<(ProxyInfo, u128)>>) -> io::Result<()> {
-    let mut file = File::create(OUTPUT_FILE)?;
-    writeln!(file, "# Active Proxies\n")?;
+fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
+    let mut file = File::create(output_file)?;
+    writeln!(file, "# 🌠 Active Proxies Report\n")?;
+
+    let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
+    let total_countries = proxies_by_country.len();
+    let avg_ping = if total_active > 0 {
+        let sum_ping: u128 = proxies_by_country.values().flatten().map(|(_, p)| *p).sum();
+        sum_ping / total_active as u128
+    } else {
+        0
+    };
+
+    writeln!(file, "## 📊 Summary")?;
+    writeln!(file, "- **Total Active Proxies**: {}", total_active)?;
+    writeln!(file, "- **Countries Covered**: {}", total_countries)?;
+    writeln!(file, "- **Average Ping**: {} ms\n", avg_ping)?;
 
     if proxies_by_country.is_empty() {
-        writeln!(file, "No active proxies found.")?;
+        writeln!(file, "😞 No active proxies found.")?;
         println!("No active proxies found");
         return Ok(());
     }
 
-    let mut countries: Vec<_> = proxies_by_country.keys().collect();
-    countries.sort();
-
-    for country_name in countries {
-        if let Some(proxies) = proxies_by_country.get(country_name) {
-            if proxies.is_empty() {
-                continue;
-            }
-
-            let flag = country_flag(&proxies[0].0.countryCode);
-
-            writeln!(file, "## {} {}\n", flag, country_name)?;
-            writeln!(file, "| IP | Location | ISP | Ping |")?;
-            writeln!(file, "|----|----------|-------|----|")?;
-
-            for (info, ping) in proxies {
-                let location = format!("{}, {}", info.regionName, info.city);
-                writeln!(
-                    file,
-                    "| `{}` | {} | {} | {} ms |",
-                    info.query,
-                    location,
-                    info.isp,
-                    ping
-                )?;
-            }
-            writeln!(file, "\n---\n")?;
+    for (country_name, proxies) in proxies_by_country {
+        if proxies.is_empty() {
+            continue;
         }
+
+        let flag = country_flag(&proxies[0].0.countryCode);
+        writeln!(file, "## {} {} ({} proxies)\n", flag, country_name, proxies.len())?;
+        writeln!(file, "| IP | Location | ISP | Ping |")?;
+        writeln!(file, "|----|----------|-------|----|")?;
+
+        for (info, ping) in proxies {
+            let location = format!("{}, {}", info.regionName, info.city);
+            let emoji = if *ping < 100 { "⚡" } else if *ping < 500 { "🐌" } else { "🦥" };
+            writeln!(
+                file,
+                "| `{}` | {} | {} | {} ms {} |",
+                info.query,
+                location,
+                info.isp,
+                ping,
+                emoji
+            )?;
+        }
+        writeln!(file, "\n---\n")?;
     }
 
-    println!("All active proxies saved to {}", OUTPUT_FILE);
+    println!("All active proxies saved to {}", output_file);
     Ok(())
 }
 
@@ -176,32 +221,39 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
     Ok(proxies)
 }
 
-async fn check_connection(host: &str, ip: &str) -> Result<u128> {
-    let timeout_duration = Duration::from_secs(TIMEOUT_SECONDS);
-    let start = Instant::now();
+async fn check_connection(proxy_ip: &str) -> Result<u128> {
+    let proxy_url = format!("http://{}:443", proxy_ip);
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::http(&proxy_url)?)
+        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS))
+        .build()?;
 
-    match tokio::time::timeout(timeout_duration, TcpStream::connect(format!("{}:443", ip))).await {
-        Ok(Ok(_stream)) => {
-            let elapsed = start.elapsed().as_millis();
-            Ok(elapsed)
-        }
-        Ok(Err(e)) => Err(Box::new(e)),
-        Err(_) => Err("Connection attempt timed out".into()),
+    let start = Instant::now();
+    let resp = client.get("https://httpbin.org/ip").send().await?;
+    if resp.status().is_success() {
+        let elapsed = start.elapsed().as_millis();
+        Ok(elapsed)
+    } else {
+        Err(anyhow::anyhow!("Proxy test failed with status: {}", resp.status()))
     }
 }
 
-async fn fetch_proxy_info(ip: &str) -> Result<ProxyInfo> {
+async fn fetch_proxy_info(ip: &str, resolver: &str) -> Result<ProxyInfo> {
     let path = format!("/json/{}", ip);
-    let url = format!("http://{}{}", IP_RESOLVER, path);
+    let url = format!("http://{}{}", resolver, path);
 
     let resp = reqwest::get(&url).await?;
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!("API request failed with status: {}", resp.status()));
+    }
     let data = resp.json::<ProxyInfo>().await?;
     Ok(data)
 }
 
 async fn process_proxy(
     proxy_line: String,
-    active_proxies: &Arc<Mutex<HashMap<String, Vec<(ProxyInfo, u128)>>>>,
+    active_proxies: &Arc<Mutex<BTreeMap<String, Vec<(ProxyInfo, u128)>>>>,
+    args: &Args,
 ) {
     let parts: Vec<&str> = proxy_line.split(',').collect();
     if parts.len() < 2 {
@@ -209,7 +261,7 @@ async fn process_proxy(
     }
     let ip = parts[0];
 
-    match tokio::try_join!(check_connection(IP_RESOLVER, ip), fetch_proxy_info(ip)) {
+    match tokio::try_join!(check_connection(ip), fetch_proxy_info(ip, &args.ip_resolver)) {
         Ok((ping, info)) => {
             println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", info.query, ping).green());
             let mut active_proxies_locked = active_proxies.lock().unwrap();
@@ -219,7 +271,7 @@ async fn process_proxy(
                 .push((info, ping));
         }
         Err(e) => {
-            println!("PROXY DEAD 🦖: {} ({})", ip, e);
+            println!("PROXY DEAD 🪧: {} ({})", ip, e);
         }
     }
 }
