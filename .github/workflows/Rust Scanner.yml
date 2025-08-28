@@ -25,7 +25,7 @@ jobs:
       run: cargo build --release
 
     - name: Give Execute Permission to Binary
-      run: chmod +x ./target/release/proxy-scanner
+      run: chmod +x ./target/release/RScanner
 
     - name: Run RScanner
       run: ./target/release/RScanner
