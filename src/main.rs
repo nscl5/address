@@ -10,8 +10,6 @@ use std::time::{Duration, Instant};
 
 use colored::*;
 use futures::StreamExt;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 
 const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
@@ -124,7 +122,7 @@ async fn main() -> Result<()> {
             let active_proxies = Arc::clone(&active_proxies);
             let args = args.clone();
             async move {
-                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await; /
+                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
                 process_proxy(proxy_line, &active_proxies, &args).await;
             }
         })
@@ -143,7 +141,7 @@ async fn main() -> Result<()> {
 
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
-    writeln!(file, "# 🌠 Active Proxies Report\n")?;
+    writeln!(file, "# 🚀 Active Proxies Report\n")?;
 
     let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
     let total_countries = proxies_by_country.len();
@@ -273,7 +271,7 @@ async fn process_proxy(
                 .push((info, ping));
         }
         Err(e) => {
-            println!("PROXY DEAD 🪧: {} ({})", ip, e);
+            println!("PROXY DEAD 🦖: {} ({})", ip, e);
         }
     }
 }
