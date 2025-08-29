@@ -45,9 +45,9 @@ jobs:
     - name: Checkout Other Repository
       uses: actions/checkout@v4
       with:
-        repository: NiREvil/vless
+        repository: sahar-km/vless
         path: other-repo
-        token: ${{ secrets.GIT_TOKEN }}  # یا secrets.OTHER_GIT_TOKEN اگر جدا باشه
+        token: ${{ secrets.TEST_ACCESS_TOKEN }}  # یا secrets.OTHER_GIT_TOKEN اگر جدا باشه
 
     - name: Handle and Append File to Other Repository
       run: |
