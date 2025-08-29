@@ -5,72 +5,80 @@ on:
   schedule:
     - cron: '0 */24 * * *' 
 
-#jobs:
-#  update-proxies:
-#    runs-on: ubuntu-latest
-#    name: Scan proxy IPs
+# کامنت کردن کل job اصلی
+# jobs:
+#   update-proxies:
+#     runs-on: ubuntu-latest
+#     name: Scan proxy IPs
+# 
+#     steps:
+#     - name: Checkout Repository
+#       uses: actions/checkout@v4
+#       with:
+#         fetch-depth: 0
+#         token: ${{ secrets.GIT_TOKEN }}
+# 
+#     - name: Install Rust Toolchain
+#       uses: dtolnay/rust-toolchain@stable
+# 
+#     - name: Build Rust Project (Release)
+#       run: cargo build --release
+# 
+#     - name: Give Execute Permission to Binary
+#       run: chmod +x ./target/release/RScanner
+# 
+#     - name: Run RScanner
+#       run: ./target/release/RScanner
+# 
+#     - name: Commit and Push Changes (Main Repo)
+#       if: ${{ success() }}
+#       run: |
+#         git config --global user.name "NET Sentinel Bot"
+#         git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
+#         git add active_proxies.md
+#         git commit -m "Update proxies recently"
+#         git push origin main --force
+#       shell: bash
 
-#    steps:
-#    - name: Checkout Repository
-#      uses: actions/checkout@v4
-#      with:
-#        fetch-depth: 0
-#        token: ${{ secrets.GIT_TOKEN }}
-
-#    - name: Install Rust Toolchain
-#      uses: dtolnay/rust-toolchain@stable
-
-#    - name: Build Rust Project (Release)
-#      run: cargo build --release
-
-#    - name: Give Execute Permission to Binary
-#      run: chmod +x ./target/release/RScanner
-
-#    - name: Run RScanner
-#      run: ./target/release/RScanner
-
-#    - name: Commit and Push Changes (Main Repo)
-#      if: ${{ success() }}
-#      run: |
-#        git config --global user.name "NET Sentinel Bot"
-#        git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
-#        git add active_proxies.md
-#        git commit -m "Update proxies recently"
-#        git push origin main --force
-#      shell: bash
-
-    # ===========================================
-    # اضافه شده: Push به repository دیگه با حالت خاص
-    # ===========================================
+# ===========================================
+# فقط این بخش اجرا شود برای تست
+# ===========================================
 jobs:
-  update-proxies:
+  sync-only:
     runs-on: ubuntu-latest
-    name: Scan proxy IPs
-
+    name: Sync to other repo only
+    
     steps:
+    - name: Checkout Main Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GIT_TOKEN }}
+
     - name: Checkout Other Repository
       uses: actions/checkout@v4
       with:
         repository: sahar-km/vless
         path: other-repo
-        token: ${{ secrets.TEST_ACCESS_TOKEN }}  # یا secrets.OTHER_GIT_TOKEN اگر جدا باشه
+        token: ${{ secrets.TEST_ACCESS_TOKEN }}
 
     - name: Handle and Append File to Other Repository
       run: |
-        mkdir -p other-repo/sub
+        # کپی فایل از ریپوی اصلی به ریپوی مقصد
+        cp ./active_proxies.md ./other-repo/sub/ProxyIP-Daily-temp.md
+        
+        cd other-repo/sub
         
         # هندل فایل مقصد
-        TARGET_FILE="other-repo/sub/ProxyIP-Daily.md"
-        SOURCE_FILE="active_proxies.md"
-
-        if [ ! -f "$TARGET_FILE" ]; then
-          cp "$SOURCE_FILE" "$TARGET_FILE"
+        if [ ! -f "ProxyIP-Daily.md" ]; then
+          mv ProxyIP-Daily-temp.md ProxyIP-Daily.md
         else
           # 130 خط اول فایل موجود رو نگه دار
-          head -n 130 "$TARGET_FILE" > temp_file.md
-          # محتوای جدید رو از خط 131 اضافه کن
-          tail -n +2 "$SOURCE_FILE" >> temp_file.md
-          mv temp_file.md "$TARGET_FILE"
+          head -n 130 ProxyIP-Daily.md > temp_combined.md
+          # محتوای جدید رو از خط دوم اضافه کن (از سرصفحه رد شو)
+          tail -n +2 ProxyIP-Daily-temp.md >> temp_combined.md
+          mv temp_combined.md ProxyIP-Daily.md
+          rm ProxyIP-Daily-temp.md
         fi
       shell: bash
 
