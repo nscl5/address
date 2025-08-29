@@ -3,8 +3,7 @@ name: Run RScanner
 on:
   workflow_dispatch: 
   schedule:
-    - cron: '0 */48 * * *' 
-
+    - cron: '0 */24 * * *' 
 
 jobs:
   update-proxies:
@@ -30,7 +29,7 @@ jobs:
     - name: Run RScanner
       run: ./target/release/RScanner
 
-    - name: Commit and Push Changes
+    - name: Commit and Push Changes (Main Repo)
       if: ${{ success() }}
       run: |
         git config --global user.name "NET Sentinel Bot"
@@ -40,4 +39,41 @@ jobs:
         git push origin main --force
       shell: bash
 
+    # ===========================================
+    # اضافه شده: Push به repository دیگه با حالت خاص
+    # ===========================================
+    - name: Checkout Other Repository
+      uses: actions/checkout@v4
+      with:
+        repository: NiREvil/vless
+        path: other-repo
+        token: ${{ secrets.GIT_TOKEN }}  # یا secrets.OTHER_GIT_TOKEN اگر جدا باشه
 
+    - name: Handle and Append File to Other Repository
+      run: |
+        mkdir -p other-repo/sub
+        
+        # هندل فایل مقصد
+        TARGET_FILE="other-repo/sub/ProxyIP-Daily.md
+        SOURCE_FILE="active_proxies.md"
+
+        if [ ! -f "$TARGET_FILE" ]; then
+          cp "$SOURCE_FILE" "$TARGET_FILE"
+        else
+          # 130 خط اول فایل موجود رو نگه دار
+          head -n 130 "$TARGET_FILE" > temp_file.md
+          # محتوای جدید رو از خط 131 اضافه کن
+          tail -n +2 "$SOURCE_FILE" >> temp_file.md
+          mv temp_file.md "$TARGET_FILE"
+        fi
+      shell: bash
+
+    - name: Commit and Push to Other Repository
+      run: |
+        cd other-repo
+        git config --global user.name "NET Sentinel Bot"
+        git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
+        git add sub/ProxyIP-Daily.md
+        git commit -m "Append proxies update from main scanner" || echo "No changes to commit"
+        git push origin main --force
+      shell: bash
