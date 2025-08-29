@@ -36,10 +36,11 @@ const GOOD_ISPS: &[&str] = &[
     "3NT SOLUTION",
     "WorkTitans B.V.",
     "PQ Hosting",
-    "The constant company",
+    "Multacom Corporation",
+    "The Constant Company",
     "G-Core",
     "IONOS",
-    "stark industries",
+    "Stark Industries",
 ];
 
 #[derive(Parser, Clone)]
