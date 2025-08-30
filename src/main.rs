@@ -171,18 +171,18 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 >
 > **Automatically updated every day**
 >
-> **Last updated:** {} <br/>
-> **Next update:** {}
+> **Last updated:** {}  
+> **Next update:** {}  
 >
 > <br/>
-
+>
 > **Summary**
-
-> **Total Active Proxies:** {} <br/>
-> **Countries Covered:** {} <br/>
-> **Average Ping:** {} ms
-
-<br/>
+>
+> **Total Active Proxies:** {}   
+> **Countries Covered:** {}   
+> **Average Ping:** {} ms  
+>
+> <br/>
 
 ---
 
@@ -193,7 +193,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
     write!(file, "{}", html_header)?;
 
     // Write the original Markdown content (without duplicating the summary)
-    writeln!(file, "# 🗺️ Active Proxies\n")?;
+    writeln!(file, "## 🗺️ Active Proxies\n")?;
 
     if proxies_by_country.is_empty() {
         writeln!(file, "😞 No active proxies found.")?;
@@ -207,7 +207,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         }
 
         let flag = country_flag(&proxies[0].0.countryCode);
-        writeln!(file, "## {} {} ({} proxies)", flag, country_name, proxies.len())?;
+        writeln!(file, "### {} {} ({} proxies)", flag, country_name, proxies.len())?;
         writeln!(file, "<details open>")?;
         writeln!(file, "<summary>Click to collapse</summary>\n")?;
         writeln!(file, "| IP | Location | ISP | Ping |")?;
@@ -226,7 +226,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
                 emoji
             )?;
         }
-        writeln!(file, "\n</details>\n\n---\n")?;  // اضافه کردن خط خالی بیشتر برای جدا کردن درست ---
+        writeln!(file, "\n</details>\n\n---\n")?;
     }
 
     println!("All active proxies saved to {}", output_file);
