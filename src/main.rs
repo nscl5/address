@@ -139,7 +139,6 @@ async fn main() -> Result<()> {
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
 
-    // Calculate summary data
     let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
     let total_countries = proxies_by_country.len();
     let avg_ping = if total_active > 0 {
@@ -149,59 +148,64 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         0
     };
 
-    // Generate current date and next update date
-    let now: DateTime<Utc> = Utc::now();
-    let last_updated = now.format("%a, %d %b %Y %H:%M:%S").to_string();
-    let next_update_dt = now + chrono::Duration::days(2);
-    let next_update = next_update_dt.format("%a, %d %b %Y %H:%M:%S").to_string();
+    let now = Utc::now();
+    // بر اساس مثال شما (از جمعه تا یکشنبه)، فاصله آپدیت ۲ روز در نظر گرفته شده است
+    let next_update = now + ChronoDuration::days(2); 
+    let last_updated_str = now.format("%a, %d %b %Y %H:%M:%S").to_string();
+    let next_update_str = next_update.format("%a, %d %b %Y %H:%M:%S").to_string();
 
-    // Write the HTML header
-    let html_header = format!(
-        r#"<p align="left">
- <img src="https://latex.codecogs.com/svg.image?\huge&space;{{\color{{Golden}}\mathrm{{PR{{\color{{black}}\O}}XY\;IP}}" width="200px" />
-</p><br/>
+    // نوشتن هِدِر سفارشی شما در فایل
+    // برای جلوگیری از خطا در کاراکترهای خاص لاتک، از دابل براکت {{}} استفاده شده است
+    writeln!(
+        file,
+        r##"<p align="left">
+ <img src="https://latex.codecogs.com/svg.image?\huge&space;{{\color{{Golden}}\mathrm{{PR{{\color{{black}}\O}}XY\;IP}}" width=200px" </p><br/>
 
 > [!WARNING]
+>
+> **Daily Fresh Proxies**
+>
+> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
+>
+> <Br/>
+>
+> **Automatically updated every day**
+>
+> **Last updated:** {} <br/>
+> **Next update:** {}
+>
+> <br/>
+> 
+> **Summary**
+> 
+> **Total Active Proxies:** {} <br/>
+> **Countries Covered:** {} <br/> 
+> **Average Ping:** {} ms
+>
+> <br/>
 
-<p><b>Daily Fresh Proxies</b></p>
-
-<p>Only <b>high-quality</b>, tested proxies from <b>top ISPs</b> and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.</p>
-
-<p><b>Automatically updated every day</b></p>
-
-<p><b>Last updated:</b> {}</p>
-<p><b>Next update:</b> {}</p>
-
-<p><b>Summary</b></p>
-
-<p><b>Total Active Proxies:</b> {}<p/>
-<p><b>Countries Covered:</b> {}<p/>
-<p><b>Average Ping:</b> {} ms</p>
-
----
-
-"#,
-        last_updated, next_update, total_active, total_countries, avg_ping
-    );
-
-    write!(file, "{}", html_header)?;
-
-    // Write the original Markdown content (without duplicating the summary)
-    writeln!(file, "## 🗺️ Active Proxies\n")?;
+</br>"##,
+        last_updated_str,
+        next_update_str,
+        total_active,
+        total_countries,
+        avg_ping
+    )?;
 
     if proxies_by_country.is_empty() {
-        writeln!(file, "😞 No active proxies found.")?;
+        writeln!(file, "\n😞 No active proxies found.")?;
         println!("No active proxies found");
         return Ok(());
     }
-
+    
+    // نوشتن لیست پروکسی‌ها به تفکیک کشور (ادامه منطق قبلی برنامه)
     for (country_name, proxies) in proxies_by_country {
         if proxies.is_empty() {
             continue;
         }
 
         let flag = country_flag(&proxies[0].0.countryCode);
-        writeln!(file, "### {} {} ({} proxies)", flag, country_name, proxies.len())?;
+        writeln!(file, "## {} {} ({} proxies)", flag, country_name, proxies.len())?;
         writeln!(file, "<details open>")?;
         writeln!(file, "<summary>Click to collapse</summary>\n")?;
         writeln!(file, "| IP             | Location                   | ISP        | Ping       |")?;
