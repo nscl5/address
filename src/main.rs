@@ -171,15 +171,15 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 >
 > **Automatically updated every day**
 >
-> **Last updated:** {}  
+> **Last updated:** {}  <br/>
 > **Next update:** {}  
 >
 > <br/>
 >
 > **Summary**
 >
-> **Total Active Proxies:** {}   
-> **Countries Covered:** {}   
+> **Total Active Proxies:** {}  <br/>
+> **Countries Covered:** {} <br/>
 > **Average Ping:** {} ms  
 >
 > <br/>
