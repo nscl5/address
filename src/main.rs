@@ -10,13 +10,17 @@ use std::time::{Duration, Instant};
 use chrono::{Duration as ChronoDuration, Utc};
 use colored::*;
 use futures::StreamExt;
+use rand::Rng;
 
-const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
+const DEFAULT_IP_RESOLVER: &str = "api.ipquery.io";
 const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
-const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
-const DEFAULT_MAX_CONCURRENT: usize = 30;
+const DEFAULT_OUTPUT_FILE: &str = "ProxyIP-Daily.md";
+const DEFAULT_MAX_CONCURRENT: usize = 50; // افزایش همزمانی (بدون محدودیت!)
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
-const REQUEST_DELAY_MS: u64 = 500;
+const MIN_DELAY_MS: u64 = 100; // کاهش تاخیر
+const MAX_DELAY_MS: u64 = 200; // کاهش تاخیر
+const MAX_RETRIES: usize = 2;
+const BULK_SIZE: usize = 100; // bulk query size
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
@@ -69,18 +73,55 @@ struct Args {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+struct IpQueryLocation {
+    country: String,
+    country_code: String,
+    city: String,
+    state: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct IpQueryIsp {
+    asn: String,
+    org: String,
+    isp: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct IpQueryResponse {
+    ip: String,
+    location: IpQueryLocation,
+    isp: IpQueryIsp,
+}
+
+// برای سازگاری با کد قبلی
+#[derive(Debug, Clone)]
 struct ProxyInfo {
     query: String,
     isp: String,
     org: String,
-    #[serde(rename = "as")]
     asn: String,
     city: String,
     regionName: String,
     country: String,
     countryCode: String,
-    #[serde(default)]
     proxy_type: String,
+}
+
+impl From<IpQueryResponse> for ProxyInfo {
+    fn from(resp: IpQueryResponse) -> Self {
+        ProxyInfo {
+            query: resp.ip,
+            isp: resp.isp.isp,
+            org: resp.isp.org,
+            asn: resp.isp.asn,
+            city: resp.location.city,
+            regionName: resp.location.state,
+            country: resp.location.country,
+            countryCode: resp.location.country_code,
+            proxy_type: String::new(),
+        }
+    }
 }
 
 #[tokio::main]
@@ -112,21 +153,62 @@ async fn main() -> Result<()> {
     println!("Filtered to {} good proxies (port 443 + ISP whitelist)", proxies.len());
 
     let active_proxies = Arc::new(Mutex::new(BTreeMap::<String, Vec<(ProxyInfo, u128)>>::new()));
+    
+    // Process proxies in bulk chunks
+    let ip_list: Vec<String> = proxies.iter()
+        .map(|line| line.split(',').next().unwrap_or("").to_string())
+        .collect();
+        
+    let chunks: Vec<Vec<String>> = ip_list.chunks(BULK_SIZE).map(|chunk| chunk.to_vec()).collect();
+    let total_chunks = chunks.len();
+    
+    println!("Processing {} IPs in {} bulk chunks of {} IPs each", ip_list.len(), total_chunks, BULK_SIZE);
 
-    let tasks = futures::stream::iter(
-        proxies.into_iter().map(|proxy_line| {
-            let active_proxies = Arc::clone(&active_proxies);
-            let args = args.clone();
-            async move {
-                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
-                process_proxy(proxy_line, &active_proxies, &args).await;
+    for (chunk_index, ip_chunk) in chunks.into_iter().enumerate() {
+        println!("Processing chunk {}/{} ({} IPs)...", chunk_index + 1, total_chunks, ip_chunk.len());
+        
+        // First check connectivity for all IPs in this chunk
+        let connectivity_tasks = futures::stream::iter(
+            ip_chunk.iter().map(|ip| {
+                let ip = ip.clone();
+                async move {
+                    match check_connection(&ip).await {
+                        Ok(ping) => Some((ip, ping)),
+                        Err(_) => None,
+                    }
+                }
+            })
+        )
+        .buffer_unordered(args.max_concurrent)
+        .collect::<Vec<_>>()
+        .await;
+
+        let connected_ips: Vec<(String, u128)> = connectivity_tasks.into_iter().filter_map(|x| x).collect();
+        
+        if connected_ips.is_empty() {
+            println!("No live connections in chunk {}", chunk_index + 1);
+            continue;
+        }
+        
+        println!("Found {} live connections in chunk {}, fetching geo info...", connected_ips.len(), chunk_index + 1);
+        
+        // Fetch geo info for connected IPs using bulk API
+        if let Ok(geo_infos) = fetch_bulk_proxy_info(&connected_ips.iter().map(|(ip, _)| ip.as_str()).collect::<Vec<_>>(), &args.ip_resolver).await {
+            let mut active_proxies_locked = active_proxies.lock().unwrap();
+            for (geo_info, (_, ping)) in geo_infos.into_iter().zip(connected_ips.iter()) {
+                println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", geo_info.query, ping).green());
+                active_proxies_locked
+                    .entry(geo_info.country.clone())
+                    .or_default()
+                    .push((geo_info, *ping));
             }
-        })
-    )
-    .buffer_unordered(args.max_concurrent)
-    .collect::<Vec<()>>();
-
-    tasks.await;
+        }
+        
+        // Small delay between chunks to be respectful
+        if chunk_index < total_chunks - 1 {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
 
     write_markdown_file(&active_proxies.lock().unwrap(), &args.output_file)
         .context("Failed to write Markdown file")?;
@@ -135,6 +217,51 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+
+
+async fn fetch_bulk_proxy_info(ips: &[&str], resolver: &str) -> Result<Vec<ProxyInfo>> {
+    if ips.is_empty() {
+        return Ok(vec![]);
+    }
+    
+    // Create comma-separated IP list
+    let ip_list = ips.join(",");
+    let url = format!("https://{}/{}", resolver, ip_list);
+    
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS * 2)) // longer timeout for bulk
+        .build()?;
+
+    let resp = client.get(&url).await?;
+    
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!("Bulk API request failed with status: {}", resp.status()));
+    }
+    
+    let responses: Vec<IpQueryResponse> = resp.json().await?;
+    let proxy_infos: Vec<ProxyInfo> = responses.into_iter().map(|r| r.into()).collect();
+    
+    Ok(proxy_infos)
+}
+
+async fn fetch_proxy_info(ip: &str, resolver: &str) -> Result<ProxyInfo> {
+    let url = format!("https://{}/{}", resolver, ip);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS))
+        .build()?;
+
+    let resp = client.get(&url).await?;
+    
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!("API request failed with status: {}", resp.status()));
+    }
+    
+    let data: IpQueryResponse = resp.json().await?;
+    Ok(data.into())
+}
+
+// باقی توابع مثل قبل...
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
 
@@ -148,13 +275,10 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
     };
 
     let now = Utc::now();
-    // بر اساس مثال شما (از جمعه تا یکشنبه)، فاصله آپدیت ۲ روز در نظر گرفته شده است
     let next_update = now + ChronoDuration::days(2); 
     let last_updated_str = now.format("%a, %d %b %Y %H:%M:%S").to_string();
     let next_update_str = next_update.format("%a, %d %b %Y %H:%M:%S").to_string();
 
-    // نوشتن هِدِر سفارشی شما در فایل
-    // برای جلوگیری از خطا در کاراکترهای خاص لاتک، از دابل براکت {{}} استفاده شده است
     writeln!(
         file,
         r##"<p align="left">
@@ -199,7 +323,6 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         return Ok(());
     }
     
-    // نوشتن لیست پروکسی‌ها به تفکیک کشور (ادامه منطق قبلی برنامه)
     for (country_name, proxies) in proxies_by_country {
         if proxies.is_empty() {
             continue;
@@ -268,43 +391,5 @@ async fn check_connection(proxy_ip: &str) -> Result<u128> {
         }
         Ok(Err(e)) => Err(anyhow::anyhow!("Connection failed: {}", e)),
         Err(_) => Err(anyhow::anyhow!("Connection timed out")),
-    }
-}
-
-async fn fetch_proxy_info(ip: &str, resolver: &str) -> Result<ProxyInfo> {
-    let path = format!("/json/{}", ip);
-    let url = format!("http://{}{}", resolver, path);
-
-    let resp = reqwest::get(&url).await?;
-    if !resp.status().is_success() {
-        return Err(anyhow::anyhow!("API request failed with status: {}", resp.status()));
-    }
-    let data = resp.json::<ProxyInfo>().await?;
-    Ok(data)
-}
-
-async fn process_proxy(
-    proxy_line: String,
-    active_proxies: &Arc<Mutex<BTreeMap<String, Vec<(ProxyInfo, u128)>>>>,
-    args: &Args,
-) {
-    let parts: Vec<&str> = proxy_line.split(',').collect();
-    if parts.len() < 2 {
-        return;
-    }
-    let ip = parts[0];
-
-    match tokio::try_join!(check_connection(ip), fetch_proxy_info(ip, &args.ip_resolver)) {
-        Ok((ping, info)) => {
-            println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", info.query, ping).green());
-            let mut active_proxies_locked = active_proxies.lock().unwrap();
-            active_proxies_locked
-                .entry(info.country.clone())
-                .or_default()
-                .push((info, ping));
-        }
-        Err(e) => {
-            println!("PROXY DEAD 🪧: {} ({})", ip, e);
-        }
     }
 }
