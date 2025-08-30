@@ -7,13 +7,12 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-
-use chrono::{DateTime, Utc};
+use chrono::{Duration as ChronoDuration, Utc};
 use colored::*;
 use futures::StreamExt;
 
 const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
-const DEFAULT_PROXY_FILE: &str = "Data/test.txt";
+const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
 const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
 const DEFAULT_MAX_CONCURRENT: usize = 150;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
