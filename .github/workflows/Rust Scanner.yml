@@ -5,56 +5,43 @@ on:
   schedule:
     - cron: '0 */24 * * *' 
 
-# کامنت کردن کل job اصلی
-# jobs:
-#   update-proxies:
-#     runs-on: ubuntu-latest
-#     name: Scan proxy IPs
-# 
-#     steps:
-#     - name: Checkout Repository
-#       uses: actions/checkout@v4
-#       with:
-#         fetch-depth: 0
-#         token: ${{ secrets.GIT_TOKEN }}
-# 
-#     - name: Install Rust Toolchain
-#       uses: dtolnay/rust-toolchain@stable
-# 
-#     - name: Build Rust Project (Release)
-#       run: cargo build --release
-# 
-#     - name: Give Execute Permission to Binary
-#       run: chmod +x ./target/release/RScanner
-# 
-#     - name: Run RScanner
-#       run: ./target/release/RScanner
-# 
-#     - name: Commit and Push Changes (Main Repo)
-#       if: ${{ success() }}
-#       run: |
-#         git config --global user.name "NET Sentinel Bot"
-#         git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
-#         git add active_proxies.md
-#         git commit -m "Update proxies recently"
-#         git push origin main --force
-#       shell: bash
-
-# ===========================================
-# فقط این بخش اجرا شود برای تست
-# ===========================================
 jobs:
-  sync-only:
+  update-proxies:
     runs-on: ubuntu-latest
-    name: Sync to other repo only
-    
+    name: Scan proxy IPs
+
     steps:
-    - name: Checkout Main Repository
+    - name: Checkout Repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
         token: ${{ secrets.GIT_TOKEN }}
 
+    - name: Install Rust Toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build Rust Project (Release)
+      run: cargo build --release
+
+    - name: Give Execute Permission to Binary
+      run: chmod +x ./target/release/RScanner
+
+    - name: Run RScanner
+      run: ./target/release/RScanner
+
+    - name: Commit and Push Changes (Main Repo)
+      if: ${{ success() }}
+      run: |
+        git config --global user.name "NET Sentinel Bot"
+        git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
+        git add active_proxies.md
+        git commit -m "Update proxies recently"
+        git push origin main --force
+      shell: bash
+
+    # ===========================================
+    # Push به repository دیگه
+    # ===========================================
     - name: Checkout Other Repository
       uses: actions/checkout@v4
       with:
