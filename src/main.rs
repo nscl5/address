@@ -152,59 +152,74 @@ async fn main() -> Result<()> {
 
     let active_proxies = Arc::new(Mutex::new(BTreeMap::<String, Vec<(ProxyInfo, u128)>>::new()));
     
-    // Process proxies in bulk chunks
+    // Extract IP addresses for processing
     let ip_list: Vec<String> = proxies.iter()
         .map(|line| line.split(',').next().unwrap_or("").to_string())
         .collect();
         
-    let chunks: Vec<Vec<String>> = ip_list.chunks(BULK_SIZE).map(|chunk| chunk.to_vec()).collect();
-    let total_chunks = chunks.len();
+    println!("Testing connectivity for {} IPs...", ip_list.len());
     
-    println!("Processing {} IPs in {} bulk chunks of {} IPs each", ip_list.len(), total_chunks, BULK_SIZE);
-
-    for (chunk_index, ip_chunk) in chunks.into_iter().enumerate() {
-        println!("Processing chunk {}/{} ({} IPs)...", chunk_index + 1, total_chunks, ip_chunk.len());
-        
-        // First check connectivity for all IPs in this chunk
-        let connectivity_tasks = futures::stream::iter(
-            ip_chunk.iter().map(|ip| {
-                let ip = ip.clone();
-                async move {
-                    match check_connection(&ip).await {
-                        Ok(ping) => Some((ip, ping)),
-                        Err(_) => None,
+    // Step 1: Check connectivity for all IPs (this is the crucial part!)
+    let connectivity_tasks = futures::stream::iter(
+        ip_list.iter().map(|ip| {
+            let ip = ip.clone();
+            async move {
+                match check_connection(&ip).await {
+                    Ok(ping) => {
+                        println!("Connection OK: {} ({} ms)", ip, ping);
+                        Some((ip, ping))
+                    },
+                    Err(_) => {
+                        println!("PROXY DEAD 🪧: {} (connection failed)", ip);
+                        None
                     }
                 }
-            })
-        )
-        .buffer_unordered(args.max_concurrent)
-        .collect::<Vec<_>>()
-        .await;
-
-        let connected_ips: Vec<(String, u128)> = connectivity_tasks.into_iter().filter_map(|x| x).collect();
-        
-        if connected_ips.is_empty() {
-            println!("No live connections in chunk {}", chunk_index + 1);
-            continue;
-        }
-        
-        println!("Found {} live connections in chunk {}, fetching geo info...", connected_ips.len(), chunk_index + 1);
-        
-        // Fetch geo info for connected IPs using bulk API
-        if let Ok(geo_infos) = fetch_bulk_proxy_info(&connected_ips.iter().map(|(ip, _)| ip.as_str()).collect::<Vec<_>>(), &args.ip_resolver).await {
-            let mut active_proxies_locked = active_proxies.lock().unwrap();
-            for (geo_info, (_, ping)) in geo_infos.into_iter().zip(connected_ips.iter()) {
-                println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", geo_info.query, ping).green());
-                active_proxies_locked
-                    .entry(geo_info.country.clone())
-                    .or_default()
-                    .push((geo_info, *ping));
             }
-        }
+        })
+    )
+    .buffer_unordered(args.max_concurrent)
+    .collect::<Vec<_>>()
+    .await;
+
+    let connected_ips: Vec<(String, u128)> = connectivity_tasks.into_iter().filter_map(|x| x).collect();
+    
+    if connected_ips.is_empty() {
+        println!("😞 No live connections found!");
+    } else {
+        println!("Found {} live connections! Fetching geo info...", connected_ips.len());
         
-        // Small delay between chunks to be respectful
-        if chunk_index < total_chunks - 1 {
-            tokio::time::sleep(Duration::from_millis(200)).await;
+        // Step 2: Get geo info for live IPs in bulk chunks
+        let chunks: Vec<Vec<(String, u128)>> = connected_ips.chunks(BULK_SIZE).map(|chunk| chunk.to_vec()).collect();
+        
+        for (chunk_index, chunk) in chunks.into_iter().enumerate() {
+            let ips: Vec<&str> = chunk.iter().map(|(ip, _)| ip.as_str()).collect();
+            
+            println!("Fetching geo info for chunk {}/{} ({} IPs)...", chunk_index + 1, (connected_ips.len() + BULK_SIZE - 1) / BULK_SIZE, ips.len());
+            
+            match fetch_bulk_proxy_info(&ips, &args.ip_resolver).await {
+                Ok(geo_infos) => {
+                    let mut active_proxies_locked = active_proxies.lock().unwrap();
+                    for (geo_info, (_, ping)) in geo_infos.into_iter().zip(chunk.iter()) {
+                        println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", geo_info.query, ping).green());
+                        active_proxies_locked
+                            .entry(geo_info.country.clone())
+                            .or_default()
+                            .push((geo_info, *ping));
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to fetch geo info for chunk {}: {}", chunk_index + 1, e);
+                    // Fallback: add IPs without detailed geo info
+                    for (ip, ping) in chunk.iter() {
+                        println!("PROXY LIVE 🟢: {} ({} ms) [no geo info]", ip, ping);
+                    }
+                }
+            }
+            
+            // Small delay between chunks
+            if chunk_index < chunks.len() - 1 {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
         }
     }
 
