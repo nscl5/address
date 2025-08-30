@@ -34,7 +34,7 @@ jobs:
       run: |
         git config --global user.name "NET Sentinel Bot"
         git config --global user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
-        git add active_proxies.md
+        git add ProxyIP-Daily.md
         git commit -m "Update proxies recently"
         git push origin main --force
       shell: bash
@@ -51,7 +51,7 @@ jobs:
 
     - name: Handle and Append File to Other Repository
       run: |
-        cp ./active_proxies.md ./other-repo/sub/ProxyIP-Daily.md
+        cp ./ProxyIP-Daily.md ./other-repo/sub/ProxyIP-Daily.md
       shell: bash
 
     - name: Commit and Push to Other Repository
