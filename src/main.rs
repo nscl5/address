@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
 use colored::*;
 use futures::StreamExt;
 
@@ -137,8 +138,8 @@ async fn main() -> Result<()> {
 
 fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
     let mut file = File::create(output_file)?;
-    writeln!(file, "# 🗺️ Active Proxies\n")?;
 
+    // Calculate summary data
     let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
     let total_countries = proxies_by_country.len();
     let avg_ping = if total_active > 0 {
@@ -148,10 +149,51 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         0
     };
 
-    writeln!(file, "## 📊 Summary")?;
-    writeln!(file, "- **Total Active Proxies**: {}", total_active)?;
-    writeln!(file, "- **Countries Covered**: {}", total_countries)?;
-    writeln!(file, "- **Average Ping**: {} ms\n", avg_ping)?;
+    // Generate current date and next update date
+    let now: DateTime<Utc> = Utc::now();
+    let last_updated = now.format("%a, %d %b %Y %H:%M:%S").to_string();
+    let next_update_dt = now + chrono::Duration::days(2);
+    let next_update = next_update_dt.format("%a, %d %b %Y %H:%M:%S").to_string();
+
+    // Write the HTML header
+    let html_header = format!(
+        r#"<p align="left">
+ <img src="https://latex.codecogs.com/svg.image?\huge&space;{{\color{{Golden}}\mathrm{{PR{{\color{{black}}\O}}XY\;IP}}" width="200px" />
+</p><br/>
+
+> [!WARNING]
+>
+> **Daily Fresh Proxies**
+>
+> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
+>
+> <br/>
+>
+> **Automatically updated every day**
+>
+> **Last updated:** {} <br/>
+> **Next update:** {}
+>
+> <br/>
+
+> **Summary**
+
+> **Total Active Proxies:** {} <br/>
+> **Countries Covered:** {} <br/>
+> **Average Ping:** {} ms
+
+<br/>
+
+---
+
+"#,
+        last_updated, next_update, total_active, total_countries, avg_ping
+    );
+
+    write!(file, "{}", html_header)?;
+
+    // Write the original Markdown content (without duplicating the summary)
+    writeln!(file, "# 🗺️ Active Proxies\n")?;
 
     if proxies_by_country.is_empty() {
         writeln!(file, "😞 No active proxies found.")?;
