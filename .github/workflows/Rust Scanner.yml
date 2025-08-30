@@ -64,22 +64,7 @@ jobs:
 
     - name: Handle and Append File to Other Repository
       run: |
-        # کپی فایل از ریپوی اصلی به ریپوی مقصد
-        cp ./active_proxies.md ./other-repo/sub/ProxyIP-Daily-temp.md
-        
-        cd other-repo/sub
-        
-        # هندل فایل مقصد
-        if [ ! -f "ProxyIP-Daily.md" ]; then
-          mv ProxyIP-Daily-temp.md ProxyIP-Daily.md
-        else
-          # 130 خط اول فایل موجود رو نگه دار
-          head -n 130 ProxyIP-Daily.md > temp_combined.md
-          # محتوای جدید رو از خط دوم اضافه کن (از سرصفحه رد شو)
-          tail -n +2 ProxyIP-Daily-temp.md >> temp_combined.md
-          mv temp_combined.md ProxyIP-Daily.md
-          rm ProxyIP-Daily-temp.md
-        fi
+        cp ./active_proxies.md ./other-repo/sub/ProxyIP-Daily.md
       shell: bash
 
     - name: Commit and Push to Other Repository
