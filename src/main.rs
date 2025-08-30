@@ -162,27 +162,21 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 </p><br/>
 
 > [!WARNING]
->
-> **Daily Fresh Proxies**
->
-> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
->
-> <br/>
->
-> **Automatically updated every day**
->
-> **Last updated:** {}  <br/>
-> **Next update:** {}  
->
-> <br/>
->
-> **Summary**
->
-> **Total Active Proxies:** {}  <br/>
-> **Countries Covered:** {} <br/>
-> **Average Ping:** {} ms  
->
-> <br/>
+
+<p><b>Daily Fresh Proxies</b></p>
+
+<p>Only <b>high-quality</b>, tested proxies from <b>top ISPs</b> and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.</p>
+
+<p><b>Automatically updated every day</b></p>
+
+<p><b>Last updated:</b> {}</p>
+<p><b>Next update:</b> {}</p>
+
+<p><b>Summary</b></p>
+
+<p><b>Total Active Proxies:</b> {}<p/>
+<p><b>Countries Covered:</b> {}<p/>
+<p><b>Average Ping:</b> {} ms</p>
 
 ---
 
@@ -210,8 +204,8 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         writeln!(file, "### {} {} ({} proxies)", flag, country_name, proxies.len())?;
         writeln!(file, "<details open>")?;
         writeln!(file, "<summary>Click to collapse</summary>\n")?;
-        writeln!(file, "| IP | Location | ISP | Ping |")?;
-        writeln!(file, "|----|----------|-------|----|")?;
+        writeln!(file, "| IP             | Location                   | ISP        | Ping       |")?;
+        writeln!(file, "| -------------- | -------------------------- | ---------- | ---------- |")?;
 
         for (info, ping) in proxies {
             let location = format!("{}, {}", info.regionName, info.city);
