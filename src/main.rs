@@ -14,7 +14,7 @@ use futures::StreamExt;
 const DEFAULT_IP_RESOLVER: &str = "ip-api.com";
 const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
 const DEFAULT_OUTPUT_FILE: &str = "active_proxies.md";
-const DEFAULT_MAX_CONCURRENT: usize = 150;
+const DEFAULT_MAX_CONCURRENT: usize = 30;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
 const REQUEST_DELAY_MS: u64 = 500;
 
@@ -183,7 +183,9 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 >
 > <br/>
 
-</br>"##,
+</br>
+
+        "##,
         last_updated_str,
         next_update_str,
         total_active,
