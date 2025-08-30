@@ -190,11 +190,12 @@ async fn main() -> Result<()> {
         
         // Step 2: Get geo info for live IPs in bulk chunks
         let chunks: Vec<Vec<(String, u128)>> = connected_ips.chunks(BULK_SIZE).map(|chunk| chunk.to_vec()).collect();
+        let total_chunks = chunks.len();
         
         for (chunk_index, chunk) in chunks.into_iter().enumerate() {
             let ips: Vec<&str> = chunk.iter().map(|(ip, _)| ip.as_str()).collect();
             
-            println!("Fetching geo info for chunk {}/{} ({} IPs)...", chunk_index + 1, (connected_ips.len() + BULK_SIZE - 1) / BULK_SIZE, ips.len());
+            println!("Fetching geo info for chunk {}/{} ({} IPs)...", chunk_index + 1, total_chunks, ips.len());
             
             match fetch_bulk_proxy_info(&ips, &args.ip_resolver).await {
                 Ok(geo_infos) => {
@@ -217,7 +218,7 @@ async fn main() -> Result<()> {
             }
             
             // Small delay between chunks
-            if chunk_index < chunks.len() - 1 {
+            if chunk_index < total_chunks - 1 {
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
         }
