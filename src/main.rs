@@ -10,15 +10,13 @@ use std::time::{Duration, Instant};
 use chrono::{Duration as ChronoDuration, Utc};
 use colored::*;
 use futures::StreamExt;
-use rand::Rng;
+// rand حذف شد چون استفاده نمی‌کنیم
 
 const DEFAULT_IP_RESOLVER: &str = "api.ipquery.io";
 const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
 const DEFAULT_OUTPUT_FILE: &str = "ProxyIP-Daily.md";
 const DEFAULT_MAX_CONCURRENT: usize = 50; // افزایش همزمانی (بدون محدودیت!)
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
-const MIN_DELAY_MS: u64 = 100; // کاهش تاخیر
-const MAX_DELAY_MS: u64 = 200; // کاهش تاخیر
 const MAX_RETRIES: usize = 2;
 const BULK_SIZE: usize = 100; // bulk query size
 
@@ -232,7 +230,7 @@ async fn fetch_bulk_proxy_info(ips: &[&str], resolver: &str) -> Result<Vec<Proxy
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS * 2)) // longer timeout for bulk
         .build()?;
 
-    let resp = client.get(&url).await?;
+    let resp = client.get(&url).send().await?; // اضافه کردن .send()
     
     if !resp.status().is_success() {
         return Err(anyhow::anyhow!("Bulk API request failed with status: {}", resp.status()));
@@ -251,7 +249,7 @@ async fn fetch_proxy_info(ip: &str, resolver: &str) -> Result<ProxyInfo> {
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS))
         .build()?;
 
-    let resp = client.get(&url).await?;
+    let resp = client.get(&url).send().await?; // اضافه کردن .send()
     
     if !resp.status().is_success() {
         return Err(anyhow::anyhow!("API request failed with status: {}", resp.status()));
