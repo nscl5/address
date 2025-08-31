@@ -10,20 +10,22 @@ use std::time::{Duration, Instant};
 use chrono::{Duration as ChronoDuration, Utc};
 use colored::*;
 use futures::StreamExt;
-// rand حذف شد چون استفاده نمی‌کنیم
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio_rustls::{TlsConnector, rustls::{ClientConfig, RootCertStore}};
+use rustls_native_certs;
 
-const DEFAULT_IP_RESOLVER: &str = "api.ipquery.io";
-const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
+const CLOUDFLARE_HOST: &str = "speed.cloudflare.com";
+const CLOUDFLARE_PATH: &str = "/meta";
+const DEFAULT_PROXY_FILE: &str = "Data/ProxyIsp.txt";
 const DEFAULT_OUTPUT_FILE: &str = "ProxyIP-Daily.md";
-const DEFAULT_MAX_CONCURRENT: usize = 50; // افزایش همزمانی (بدون محدودیت!)
+const DEFAULT_MAX_CONCURRENT: usize = 20;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
-const MAX_RETRIES: usize = 2;
-const BULK_SIZE: usize = 100; // bulk query size
 
 const GOOD_ISPS: &[&str] = &[
     "Google",
     "Amazon",
-    "Cloudflare",
+    "Cloudflare", 
     "Rackspace",
     "M247",
     "DataCamp",
@@ -46,8 +48,8 @@ const GOOD_ISPS: &[&str] = &[
 ];
 
 #[derive(Parser, Clone)]
-#[command(name = "Proxy Checker")]
-#[command(about = "Checks proxies and outputs active ones")]
+#[command(name = "Cloudflare Proxy Checker")]
+#[command(about = "Checks proxies using Cloudflare speed test endpoint")]
 struct Args {
     /// Path to the proxy file
     #[arg(short, long, default_value = DEFAULT_PROXY_FILE)]
@@ -56,10 +58,6 @@ struct Args {
     /// Output file path
     #[arg(short, long, default_value = DEFAULT_OUTPUT_FILE)]
     output_file: String,
-
-    /// IP resolver URL
-    #[arg(long, default_value = DEFAULT_IP_RESOLVER)]
-    ip_resolver: String,
 
     /// Max concurrent tasks
     #[arg(long, default_value_t = DEFAULT_MAX_CONCURRENT)]
@@ -71,55 +69,28 @@ struct Args {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct IpQueryLocation {
-    country: String,
-    country_code: String,
-    city: String,
-    state: String,
+struct CloudflareResponse {
+    #[serde(rename = "clientIp")]
+    client_ip: String,
+    #[serde(rename = "asOrganization")]
+    as_organization: Option<String>,
+    #[serde(rename = "asn")]
+    asn: Option<u32>,
+    country: Option<String>,
+    city: Option<String>,
+    region: Option<String>,
+    #[serde(rename = "colo")]
+    colo: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-struct IpQueryIsp {
-    asn: String,
-    org: String,
-    isp: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct IpQueryResponse {
-    ip: String,
-    location: IpQueryLocation,
-    isp: IpQueryIsp,
-}
-
-// برای سازگاری با کد قبلی
 #[derive(Debug, Clone)]
 struct ProxyInfo {
-    query: String,
-    isp: String,
-    org: String,
-    asn: String,
-    city: String,
-    regionName: String,
+    ip: String,
+    port: String,
     country: String,
-    countryCode: String,
-    proxy_type: String,
-}
-
-impl From<IpQueryResponse> for ProxyInfo {
-    fn from(resp: IpQueryResponse) -> Self {
-        ProxyInfo {
-            query: resp.ip,
-            isp: resp.isp.isp,
-            org: resp.isp.org,
-            asn: resp.isp.asn,
-            city: resp.location.city,
-            regionName: resp.location.state,
-            country: resp.location.country,
-            countryCode: resp.location.country_code,
-            proxy_type: String::new(),
-        }
-    }
+    org: String,
+    ping: u128,
+    cf_info: CloudflareResponse,
 }
 
 #[tokio::main]
@@ -135,6 +106,7 @@ async fn main() -> Result<()> {
         .context("Failed to read proxy file")?;
     println!("Loaded {} proxies from file", proxies.len());
 
+    // فیلتر کردن پروکسی‌های خوب
     let proxies: Vec<String> = proxies
         .into_iter()
         .filter(|line| {
@@ -150,260 +122,148 @@ async fn main() -> Result<()> {
         .collect();
     println!("Filtered to {} good proxies (port 443 + ISP whitelist)", proxies.len());
 
-    let active_proxies = Arc::new(Mutex::new(BTreeMap::<String, Vec<(ProxyInfo, u128)>>::new()));
-    
-    // Extract IP addresses for processing
-    let ip_list: Vec<String> = proxies.iter()
-        .map(|line| line.split(',').next().unwrap_or("").to_string())
-        .collect();
-        
-    println!("Testing connectivity for {} IPs...", ip_list.len());
-    
-    // Step 1: Check connectivity for all IPs (this is the crucial part!)
-    let connectivity_tasks = futures::stream::iter(
-        ip_list.iter().map(|ip| {
-            let ip = ip.clone();
+    let active_proxies = Arc::new(Mutex::new(Vec::<ProxyInfo>::new()));
+
+    // دریافت IP اصلی (بدون پروکسی)
+    let original_response = get_cloudflare_info(None, args.timeout).await
+        .context("Failed to get original IP info")?;
+    println!("Original IP: {}", original_response.client_ip);
+
+    let tasks = futures::stream::iter(
+        proxies.into_iter().map(|proxy_line| {
+            let active_proxies = Arc::clone(&active_proxies);
+            let args = args.clone();
+            let original_response = original_response.clone();
             async move {
-                match check_connection(&ip).await {
-                    Ok(ping) => {
-                        println!("Connection OK: {} ({} ms)", ip, ping);
-                        Some((ip, ping))
-                    },
-                    Err(_) => {
-                        println!("PROXY DEAD 🪧: {} (connection failed)", ip);
-                        None
-                    }
-                }
+                process_proxy_cloudflare(proxy_line, &active_proxies, &args, &original_response).await;
             }
         })
     )
     .buffer_unordered(args.max_concurrent)
-    .collect::<Vec<_>>()
-    .await;
+    .collect::<Vec<()>>();
 
-    let connected_ips: Vec<(String, u128)> = connectivity_tasks.into_iter().filter_map(|x| x).collect();
-    
-    if connected_ips.is_empty() {
-        println!("😞 No live connections found!");
-    } else {
-        println!("Found {} live connections! Fetching geo info...", connected_ips.len());
-        
-        // Step 2: Get geo info for live IPs in bulk chunks
-        let chunks: Vec<Vec<(String, u128)>> = connected_ips.chunks(BULK_SIZE).map(|chunk| chunk.to_vec()).collect();
-        let total_chunks = chunks.len();
-        
-        for (chunk_index, chunk) in chunks.into_iter().enumerate() {
-            let ips: Vec<&str> = chunk.iter().map(|(ip, _)| ip.as_str()).collect();
-            
-            println!("Fetching geo info for chunk {}/{} ({} IPs)...", chunk_index + 1, total_chunks, ips.len());
-            
-            match fetch_bulk_proxy_info(&ips, &args.ip_resolver).await {
-                Ok(geo_infos) => {
-                    let mut active_proxies_locked = active_proxies.lock().unwrap();
-                    for (geo_info, (_, ping)) in geo_infos.into_iter().zip(chunk.iter()) {
-                        println!("{}", format!("PROXY LIVE 🟢: {} ({} ms)", geo_info.query, ping).green());
-                        active_proxies_locked
-                            .entry(geo_info.country.clone())
-                            .or_default()
-                            .push((geo_info, *ping));
-                    }
-                }
-                Err(e) => {
-                    println!("Failed to fetch geo info for chunk {}: {}", chunk_index + 1, e);
-                    // Fallback: add IPs without detailed geo info
-                    for (ip, ping) in chunk.iter() {
-                        println!("PROXY LIVE 🟢: {} ({} ms) [no geo info]", ip, ping);
-                    }
-                }
-            }
-            
-            // Small delay between chunks
-            if chunk_index < total_chunks - 1 {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-            }
-        }
-    }
+    tasks.await;
 
-    write_markdown_file(&active_proxies.lock().unwrap(), &args.output_file)
+    write_markdown_file_cf(&active_proxies.lock().unwrap(), &args.output_file)
         .context("Failed to write Markdown file")?;
 
-    println!("Proxy checking completed.");
+    println!("Cloudflare proxy checking completed.");
     Ok(())
 }
 
-
-
-async fn fetch_bulk_proxy_info(ips: &[&str], resolver: &str) -> Result<Vec<ProxyInfo>> {
-    if ips.is_empty() {
-        return Ok(vec![]);
-    }
+async fn get_cloudflare_info(proxy: Option<(&str, &str)>, timeout_secs: u64) -> Result<CloudflareResponse> {
+    let start = Instant::now();
     
-    // Create comma-separated IP list
-    let ip_list = ips.join(",");
-    let url = format!("https://{}/{}", resolver, ip_list);
-    
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS * 2)) // longer timeout for bulk
-        .build()?;
+    // تنظیم TLS
+    let mut root_cert_store = RootCertStore::empty();
+    root_cert_store.add_server_trust_anchors(
+        rustls_native_certs::load_native_certs()?
+            .into_iter()
+            .map(|cert| rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                cert.0,
+                cert.1,
+                cert.2,
+            ))
+    );
 
-    let resp = client.get(&url).send().await?; // اضافه کردن .send()
-    
-    if !resp.status().is_success() {
-        return Err(anyhow::anyhow!("Bulk API request failed with status: {}", resp.status()));
-    }
-    
-    let responses: Vec<IpQueryResponse> = resp.json().await?;
-    let proxy_infos: Vec<ProxyInfo> = responses.into_iter().map(|r| r.into()).collect();
-    
-    Ok(proxy_infos)
-}
+    let mut config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_cert_store)
+        .with_no_client_auth();
 
-async fn fetch_proxy_info(ip: &str, resolver: &str) -> Result<ProxyInfo> {
-    let url = format!("https://{}/{}", resolver, ip);
+    let connector = TlsConnector::from(Arc::new(config));
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS))
-        .build()?;
-
-    let resp = client.get(&url).send().await?; // اضافه کردن .send()
-    
-    if !resp.status().is_success() {
-        return Err(anyhow::anyhow!("API request failed with status: {}", resp.status()));
-    }
-    
-    let data: IpQueryResponse = resp.json().await?;
-    Ok(data.into())
-}
-
-// باقی توابع مثل قبل...
-fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u128)>>, output_file: &str) -> io::Result<()> {
-    let mut file = File::create(output_file)?;
-
-    let total_active = proxies_by_country.values().map(|v| v.len()).sum::<usize>();
-    let total_countries = proxies_by_country.len();
-    let avg_ping = if total_active > 0 {
-        let sum_ping: u128 = proxies_by_country.values().flatten().map(|(_, p)| *p).sum();
-        sum_ping / total_active as u128
+    // اتصال به سرور (مستقیم یا از طریق پروکسی)
+    let stream = if let Some((proxy_ip, proxy_port)) = proxy {
+        tokio::time::timeout(
+            Duration::from_secs(timeout_secs),
+            TcpStream::connect(format!("{}:{}", proxy_ip, proxy_port))
+        ).await??
     } else {
-        0
+        tokio::time::timeout(
+            Duration::from_secs(timeout_secs),
+            TcpStream::connect(format!("{}:443", CLOUDFLARE_HOST))
+        ).await??
     };
 
-    let now = Utc::now();
-    let next_update = now + ChronoDuration::days(2); 
-    let last_updated_str = now.format("%a, %d %b %Y %H:%M:%S").to_string();
-    let next_update_str = next_update.format("%a, %d %b %Y %H:%M:%S").to_string();
+    // TLS handshake
+    let domain = rustls::ServerName::try_from(CLOUDFLARE_HOST)?;
+    let mut tls_stream = connector.connect(domain, stream).await?;
 
-    writeln!(
-        file,
-        r##"<p align="left">
- <img src="https://latex.codecogs.com/svg.image?\huge&space;{{\color{{Golden}}\mathrm{{PR{{\color{{black}}\O}}XY\;IP}}" width=200px" </p><br/>
+    // ارسال HTTP request
+    let request = format!(
+        "GET {} HTTP/1.1\r\n\
+         Host: {}\r\n\
+         User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n\
+         Connection: close\r\n\r\n",
+        CLOUDFLARE_PATH, CLOUDFLARE_HOST
+    );
 
-> [!WARNING]
->
-> **Daily Fresh Proxies**
->
-> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
->
-> <Br/>
->
-> **Automatically updated every day**
->
-> **Last updated:** {} <br/>
-> **Next update:** {}
->
-> <br/>
-> 
-> **Summary**
-> 
-> **Total Active Proxies:** {} <br/>
-> **Countries Covered:** {} <br/> 
-> **Average Ping:** {} ms
->
-> <br/>
+    tls_stream.write_all(request.as_bytes()).await?;
 
-</br>
+    // خواندن پاسخ
+    let mut response = Vec::new();
+    tls_stream.read_to_end(&mut response).await?;
 
-        "##,
-        last_updated_str,
-        next_update_str,
-        total_active,
-        total_countries,
-        avg_ping
-    )?;
+    let response_str = String::from_utf8_lossy(&response);
+    
+    // جدا کردن header از body
+    if let Some(body_start) = response_str.find("\r\n\r\n") {
+        let body = &response_str[body_start + 4..];
+        let cf_response: CloudflareResponse = serde_json::from_str(body.trim())?;
+        return Ok(cf_response);
+    }
 
-    if proxies_by_country.is_empty() {
-        writeln!(file, "\n😞 No active proxies found.")?;
-        println!("No active proxies found");
-        return Ok(());
+    Err(anyhow::anyhow!("Invalid HTTP response"))
+}
+
+async fn process_proxy_cloudflare(
+    proxy_line: String,
+    active_proxies: &Arc<Mutex<Vec<ProxyInfo>>>,
+    args: &Args,
+    original_response: &CloudflareResponse,
+) {
+    let parts: Vec<&str> = proxy_line.split(',').collect();
+    if parts.len() < 4 {
+        return;
     }
     
-    for (country_name, proxies) in proxies_by_country {
-        if proxies.is_empty() {
-            continue;
-        }
+    let ip = parts[0];
+    let port = parts[1];
+    let country = parts[2];
+    let org = parts[3];
 
-        let flag = country_flag(&proxies[0].0.countryCode);
-        writeln!(file, "## {} {} ({} proxies)", flag, country_name, proxies.len())?;
-        writeln!(file, "<details open>")?;
-        writeln!(file, "<summary>Click to collapse</summary>\n")?;
-        writeln!(file, "| IP             | Location                   | ISP        | Ping       |")?;
-        writeln!(file, "| -------------- | -------------------------- | ---------- | ---------- |")?;
-
-        for (info, ping) in proxies {
-            let location = format!("{}, {}", info.regionName, info.city);
-            let emoji = if *ping < 100 { "⚡" } else if *ping < 500 { "🐌" } else { "🦥" };
-            writeln!(
-                file,
-                "| `{}` | {} | {} | {} ms {} |",
-                info.query,
-                location,
-                info.isp,
-                ping,
-                emoji
-            )?;
-        }
-        writeln!(file, "\n</details>\n\n---\n")?;
-    }
-
-    println!("All active proxies saved to {}", output_file);
-    Ok(())
-}
-
-fn country_flag(code: &str) -> String {
-    code.chars()
-        .filter_map(|c| {
-            if c.is_ascii_alphabetic() {
-                Some(char::from_u32(0x1F1E6 + (c.to_ascii_uppercase() as u32 - 'A' as u32)).unwrap())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut proxies = Vec::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        if !line.trim().is_empty() {
-            proxies.push(line);
-        }
-    }
-
-    Ok(proxies)
-}
-
-async fn check_connection(proxy_ip: &str) -> Result<u128> {
     let start = Instant::now();
-    match tokio::time::timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECONDS), tokio::net::TcpStream::connect(format!("{}:443", proxy_ip))).await {
-        Ok(Ok(_stream)) => {
-            let elapsed = start.elapsed().as_millis();
-            Ok(elapsed)
+
+    match get_cloudflare_info(Some((ip, port)), args.timeout).await {
+        Ok(proxy_response) => {
+            let ping = start.elapsed().as_millis();
+            
+            // بررسی اینکه IP واقعاً تغییر کرده (پروکسی کار میکنه)
+            if original_response.client_ip != proxy_response.client_ip {
+                let cleaned_org = clean_org_name(&proxy_response.as_organization.unwrap_or_else(|| org.to_string()));
+                
+                let proxy_info = ProxyInfo {
+                    ip: ip.to_string(),
+                    port: port.to_string(),
+                    country: proxy_response.country.unwrap_or_else(|| country.to_string()),
+                    org: cleaned_org,
+                    ping,
+                    cf_info: proxy_response.clone(),
+                };
+
+                println!(
+                    "{}",
+                    format!(
+                        "CF PROXY LIVE 🟢: {}:{} -> {} ({} ms) [{}]",
+                        ip, port, proxy_response.client_ip, ping,
+                        proxy_response.country.unwrap_or_default()
+                    ).green()
+                );
+
+                active_proxies.lock().unwrap().push(proxy_info);
+            } else {
+                println!("PROXY DEAD 💀: {}:{} (IP not changed)", ip, port);
         }
-        Ok(Err(e)) => Err(anyhow::anyhow!("Connection failed: {}", e)),
-        Err(_) => Err(anyhow::anyhow!("Connection timed out")),
     }
 }
