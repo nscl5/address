@@ -192,11 +192,11 @@ async fn process_proxy(
                     .or_default()
                     .push((info, ping));
             } else {
-                println!("PROXY DEAD 🪧: {} (did not change IP)", ip);
+                println!("PROXY DEAD 💀: {} (did not change IP)", ip);
             }
         }
         Err(e) => {
-            println!("PROXY DEAD 🪧: {} ({})", ip, e);
+            println!("PROXY DEAD 💀: {} ({})", ip, e);
         }
     }
 }
@@ -220,17 +220,33 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 
     writeln!(
         file,
-        r##"
-# Daily Proxy Report
+        r##"<p align="left">
+ <img src="https://latex.codecogs.com/svg.image?\huge&space;{{\color{{Golden}}\mathrm{{PR{{\color{{black}}\O}}XY\;IP}}" width=200px" </p><br/>
 
-**Last updated:** {}  
-**Next update:** {}  
+> [!WARNING]
+>
+> **Daily Fresh Proxies**
+>
+> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
+>
+> <Br/>
+>
+> **Automatically updated every day**
+>
+> **Last updated:** {} <br/>
+> **Next update:** {}
+>
+> <br/>
+> 
+> **Summary**
+> 
+> **Total Active Proxies:** {} <br/>
+> **Countries Covered:** {} <br/> 
+> **Average Ping:** {} ms
+>
+> <br/>
 
-- **Total Active Proxies:** {}  
-- **Countries Covered:** {}  
-- **Average Ping:** {} ms  
-
----
+</br>
         "##,
         last_updated_str,
         next_update_str,
