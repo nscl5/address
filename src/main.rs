@@ -31,14 +31,18 @@ const GOOD_ISPS: &[&str] = &[
     "gmbh",
     "Akamai",
     "Tencent",
+    "The Empire",
     "OVH",
     "ByteDance",
     "Starlink",
+    "3NT SOLUTION",
+    "WorkTitans B.V.",
     "PQ Hosting",
-    "Multacom",
+    "Multacom Corporation",
     "The Constant Company",
     "G-Core",
     "IONOS",
+    "Stark Industries",
 ];
 
 #[derive(Parser, Clone)]
@@ -104,7 +108,6 @@ async fn main() -> Result<()> {
         .collect();
     println!("Filtered to {} good proxies (port 443 + ISP whitelist)", proxies.len());
 
-    // خودت (بدون پروکسی) برای مقایسه
     let self_meta = fetch_cf_meta(None).await?;
     println!("Your real IP: {}", self_meta.clientIp);
 
@@ -255,23 +258,38 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         avg_ping
     )?;
 
-    for (country, proxies) in proxies_by_country {
-        writeln!(file, "## {} ({} proxies)", country, proxies.len())?;
-        writeln!(file, "| IP | ISP | Location | Ping |")?;
-        writeln!(file, "|----|-----|----------|------|")?;
+    let flag = country_flag(&country);
+        writeln!(file, "## {} {} ({} proxies)", flag, country, proxies.len())?;
+        writeln!(file, "<details open>")?;
+        writeln!(file, "<summary>Click to collapse</summary>\n")?;
+        writeln!(file, "| IP | Location | ISP | Ping |")?;
+        writeln!(file, "|----|----------|-----|------|")?;
 
         for (info, ping) in proxies {
             let location = format!("{}, {}", info.region, info.city);
+            let emoji = if *ping < 100 { "⚡" } else if *ping < 400 { "🐌" } else { "🦥" };
             writeln!(
                 file,
-                "| `{}` | {} | {} | {} ms |",
-                info.ip, info.isp, location, ping
+                "| `{}` | {} | {} | {} ms {} |",
+                info.ip, info.isp, location, ping, emoji
             )?;
         }
-        writeln!(file, "\n---\n")?;
+        writeln!(file, "\n</details>\n\n---\n")?;
     }
 
     Ok(())
+}
+
+fn country_flag(code: &str) -> String {
+    code.chars()
+        .filter_map(|c| {
+            if c.is_ascii_alphabetic() {
+                Some(char::from_u32(0x1F1E6 + (c.to_ascii_uppercase() as u32 - 'A' as u32)).unwrap())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn read_proxy_file(file_path: &str) -> io::Result<Vec<String>> {
