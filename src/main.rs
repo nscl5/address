@@ -14,7 +14,7 @@ use tokio::net::TcpStream;
 use tokio_native_tls::TlsConnector;
 use native_tls::TlsConnector as NativeTlsConnector;
 
-const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
+const DEFAULT_PROXY_FILE: &str = "Data/Proxy-September.txt";
 const DEFAULT_OUTPUT_FILE: &str = "ProxyIP-Daily.md";
 const DEFAULT_MAX_CONCURRENT: usize = 20;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 8;
@@ -23,26 +23,16 @@ const REQUEST_DELAY_MS: u64 = 500;
 const GOOD_ISPS: &[&str] = &[
     "Google",
     "Amazon",
-    "Cloudflare",
-    "Rackspace",
-    "M247",
-    "DataCamp",
-    "Total Uptime",
-    "gmbh",
-    "Akamai",
     "Tencent",
-    "The Empire",
-    "OVH",
+    "Constant",
+    "Multacom",
+    "DataCamp",
     "ByteDance",
-    "Starlink",
-    "3NT SOLUTION",
-    "WorkTitans B.V.",
+    "Rackspace",
+    "Amazoncom",
+    "Cloudflare",
     "PQ Hosting",
-    "Multacom Corporation",
-    "The Constant Company",
-    "G-Core",
-    "IONOS",
-    "Stark Industries",
+    "Total Uptime",
 ];
 
 #[derive(Parser, Clone)]
@@ -217,7 +207,7 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
     };
 
     let now = Utc::now();
-    let next_update = now + ChronoDuration::days(2); 
+    let next_update = now + ChronoDuration::days(1); 
     let last_updated_str = now.format("%a, %d %b %Y %H:%M:%S").to_string();
     let next_update_str = next_update.format("%a, %d %b %Y %H:%M:%S").to_string();
 
@@ -230,22 +220,22 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
 >
 > **Daily Fresh Proxies**
 >
-> Only **high-quality**, tested proxies from **top ISPs** and data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp.
+> Only **high-quality**, tested proxies from **top ISPs** and Data centers worldwide such as Google, Cloudflare, Amazon, Tencent, OVH, DataCamp ...
 >
 > <Br/>
 >
 > **Automatically updated every day**
 >
-> **Last updated:** {} <br/>
-> **Next update:** {}
+> Last updated: **{}** <br/>
+> Next update: **{}**
 >
 > <br/>
 > 
 > **Summary**
 > 
-> **Total Active Proxies:** {} <br/>
-> **Countries Covered:** {} <br/> 
-> **Average Ping:** {} ms
+> Total Active Proxies: **{}** <br/>
+> Countries Covered: **{}** <br/> 
+> Average Ping: **{} ms**
 >
 > <br/>
 
@@ -258,25 +248,27 @@ fn write_markdown_file(proxies_by_country: &BTreeMap<String, Vec<(ProxyInfo, u12
         avg_ping
     )?;
 
-    let flag = country_flag(&country);
+    for (country, proxies) in proxies_by_country.iter() {
+        let flag = country_flag(country);
         writeln!(file, "## {} {} ({} proxies)", flag, country, proxies.len())?;
         writeln!(file, "<details open>")?;
         writeln!(file, "<summary>Click to collapse</summary>\n")?;
         writeln!(file, "| IP | Location | ISP | Ping |")?;
         writeln!(file, "|----|----------|-----|------|")?;
 
-        for (info, ping) in proxies {
+        for (info, ping) in proxies.iter() {
             let location = format!("{}, {}", info.region, info.city);
-            let emoji = if *ping < 100 { "⚡" } else if *ping < 400 { "🐌" } else { "🦥" };
+            let emoji = if *ping < 700 { "⚡" } else if *ping < 1000 { "🐌" } else { "🦥" };
             writeln!(
                 file,
                 "| `{}` | {} | {} | {} ms {} |",
-                info.ip, info.isp, location, ping, emoji
+                info.ip, location, info.isp, ping, emoji
             )?;
         }
         writeln!(file, "\n</details>\n\n---\n")?;
     }
 
+    println!("All active proxies saved to {}", output_file);
     Ok(())
 }
 
