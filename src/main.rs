@@ -129,7 +129,7 @@ fn write_update_file(file_path: &str) -> io::Result<()> {
     let tehran_now = now.with_timezone(&Tehran);
     let timestamp = tehran_now.format("%a, %d %b %Y %H:%M:%S").to_string();
     
-    writeln!(file, "Last updated: {}", timestamp)?;
+    writeln!(file, "Last updated: {} – IRN", timestamp)?;
     
     Ok(())
 }
