@@ -138,15 +138,19 @@ fn write_csv_file(file_path: &str, proxies: &[ProxyEntry]) -> io::Result<()> {
     // Write CSV header
     writeln!(file, "IP Address, Port, TLS, Data Center, Region, City, ASN, latency")?;
     
-    // Write proxy data
+    // Write proxy data - only for port 443
     for proxy in proxies {
-        // Since we don't have TLS, Data Center, etc. info, we'll use default values
-        writeln!(
-            file, 
-            "{},{},true,n/a,n/a,n/a,n/a,n/a", 
-            proxy.ip, 
-            proxy.port
-        )?;
+        // Filter: only include proxies with port 443
+        if proxy.port == "443" {
+            writeln!(
+                file, 
+                "{},{},true,{},N/A,N/A,{},N/A", 
+                proxy.ip, 
+                proxy.port,
+                proxy.country,
+                proxy.isp
+            )?;
+        }
     }
     
     Ok(())
