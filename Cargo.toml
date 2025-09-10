@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
 clap = { version = "4.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1.0", features = ["full"] }
+chrono-tz = "0.8"
