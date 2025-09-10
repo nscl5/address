@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
 
     // Generate country-specific files
     for (country, country_proxies) in &country_groups {
-        let country_file = format!("{}{}", args.output_dir, country);
+        let country_file = format!("{}{}.txt", args.output_dir, country);
         write_country_file(&country_file, country_proxies)
             .context(format!("Failed to write country file for {}", country))?;
         println!("Created {}: {} proxies", country_file, country_proxies.len());
