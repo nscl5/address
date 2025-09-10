@@ -1,0 +1,73 @@
+name: Sync, Modify and Mirror to Destination
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          path: source_repo
+
+      - name: Checkout destination repository
+        uses: actions/checkout@v4
+        with:
+          repository: NiREvil/vless
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          path: destination_repo
+
+      - name: Process and move files
+        run: |
+          TARGET_DIR="destination_repo/sub/country_proxies"
+
+          echo "Starting file processing..."
+          echo "Target directory is: $TARGET_DIR"
+          
+          find source_repo -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
+          echo "All files copied to target directory."
+
+          mv $TARGET_DIR/last_update.txt $TARGET_DIR/01_last_update.txt
+          mv $TARGET_DIR/proxies.csv $TARGET_DIR/02_proxies.csv
+          mv $TARGET_DIR/proxies.txt $TARGET_DIR/03_proxies.txt
+          echo "Files renamed."
+
+          echo "
+          
+           /**
+           * Credits: NiREvil 
+           * ProxyIP checker: https://proxyip.victoriacross.workers.dev
+           * ProxyIP checker: https://checker-3j2.pages.dev
+           * ProxyIP checker: https://telegram.me/ProxyIPChecker_Bot
+           * ProxyIP checker: https://yumiproxy.vercel.app/
+           * Source of proxies: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+           * Telegram Group: https://telegram.me/NiREvil_GP
+           */
+          " >> $TARGET_DIR/01_last_update.txt
+          echo "Content appended to 01_last_update.txt"
+          
+          sed -i '1s/.*/IP Address, Port, TLS, Data Center, Region, City, ASN, latency/' $TARGET_DIR/02_proxies.csv
+          echo "Header of 02_proxies.csv has been updated."
+          echo "File processing complete."
+
+      - name: Commit and push changes
+        run: |
+          cd destination_repo
+          git config --global user.name 'NET Sentinel Bot'
+          git config --global user.email '224584266+NetSentinel-Bot@users.noreply.github.com'
+          
+          if [[ -z $(git status -s) ]]; then
+            echo "No changes to commit."
+          else
+            echo "Changes detected. Committing and pushing..."
+            git add .
+            git commit -m "Automated sync and update from source repository"
+            git push
+          fi
