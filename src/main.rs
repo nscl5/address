@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 use chrono::Utc;
+use chrono_tz::Asia::Tehran;
 
 const DEFAULT_PROXY_FILE: &str = "Data/alive.txt";
 const DEFAULT_OUTPUT_DIR: &str = "country_proxies/";
@@ -125,7 +126,8 @@ fn write_country_file(file_path: &str, proxies: &[ProxyEntry]) -> io::Result<()>
 fn write_update_file(file_path: &str) -> io::Result<()> {
     let mut file = File::create(file_path)?;
     let now = Utc::now();
-    let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let tehran_now = now.with_timezone(&Tehran);
+    let timestamp = tehran_now.format("%a, %d %b %Y %H:%M:%S").to_string();
     
     writeln!(file, "Last updated: {}", timestamp)?;
     
@@ -144,7 +146,7 @@ fn write_csv_file(file_path: &str, proxies: &[ProxyEntry]) -> io::Result<()> {
         if proxy.port == "443" {
             writeln!(
                 file, 
-                "{},{},true,{},N/A,N/A,{},N/A", 
+                "{},{},true,{},N/A,-,{},-", 
                 proxy.ip, 
                 proxy.port,
                 proxy.country,
