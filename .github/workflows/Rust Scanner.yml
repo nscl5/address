@@ -2,8 +2,8 @@ name: Run RScanner
 
 on:
   workflow_dispatch: 
-  schedule:
-    - cron: '0 */24 * * *' 
+#  schedule:
+#    - cron: '0 */24 * * *' 
 
 jobs:
   update-proxies:
@@ -40,7 +40,7 @@ jobs:
       shell: bash
 
     # ===========================================
-    # Push به repository دیگه
+    # Push to other repository 
     # ===========================================
 #    - name: Checkout Other Repository
 #      uses: actions/checkout@v4
