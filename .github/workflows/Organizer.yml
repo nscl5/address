@@ -1,9 +1,12 @@
 name: Rust Proxy Organizer
 
 on:
-  workflow_dispatch: 
-#  schedule:
-#    - cron: '0 */24 * * *' 
+  push:
+    branches: 'main'
+    paths:
+      - '**/Data/*.txt'
+      - '**/Data/*.json'
+  workflow_dispatch:
 
 jobs:
   organize-proxies:
@@ -26,7 +29,7 @@ jobs:
     - name: Give Execute Permission to Binary
       run: chmod +x ./target/release/Organizer
 
-    - name: 🗂️ Run Proxy Organizer
+    - name: Run Proxy Organizer
       run: ./target/release/Organizer
 
     - name: Commit and Push if Changed
