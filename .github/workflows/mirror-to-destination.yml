@@ -4,8 +4,10 @@ permissions:
   contents: write
 
 on:
-  schedule:
-    - cron: '30 8 * * *'
+  push:
+    branches: 'main'
+    paths:
+      - '**/country_proxies/*.txt'
   workflow_dispatch:
 
 jobs:
@@ -68,6 +70,6 @@ jobs:
           else
             echo "Changes detected. Committing and pushing..."
             git add .
-            git commit -m "Automated sync and update from source repository"
+            git commit -m "auto: sync and update proxies"
             git push
           fi
