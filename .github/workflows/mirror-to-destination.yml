@@ -7,7 +7,7 @@ on:
   push:
     branches: 'main'
     paths:
-      - '**/country_proxies/*.txt'
+      - '**/country_proxies/US.txt'
   workflow_dispatch:
 
 jobs:
@@ -70,6 +70,6 @@ jobs:
           else
             echo "Changes detected. Committing and pushing..."
             git add .
-            git commit -m "auto: sync and update proxies"
+            git commit -m "auto: sync and update country proxies"
             git push
           fi
