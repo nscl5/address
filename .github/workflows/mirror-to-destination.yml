@@ -7,7 +7,7 @@ on:
   push:
     branches: 'main'
     paths:
-      - '**/country_proxies/US.txt'
+      - '/country_proxies/US.txt'
   workflow_dispatch:
 
 jobs:
