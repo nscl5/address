@@ -1,6 +1,6 @@
 # profile-title: base64:U0hBRE9XU09DS1MgVElNRSDwn5G7
 # profile-update-interval: 11
-# subscription-userinfo: upload=5368709120; download=117037858816; total=955630223360; expire=1825718401
+# subscription-userinfo: upload=5368709120; download=117037858816; total=955630223360; expire=1795910401
 # support-url: https://t.me/F_NiREvil
 # profile-web-page-url: https://github.com/NiREvil/vless
 
