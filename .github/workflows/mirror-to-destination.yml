@@ -7,7 +7,7 @@ on:
   push:
     branches: 'main'
     paths:
-      - '/country_proxies/US.txt'
+      - '**/US.*'
   workflow_dispatch:
 
 jobs:
@@ -34,8 +34,8 @@ jobs:
           echo "Target directory is: $TARGET_DIR"
 
           echo "Copying p-list-november.txt..."
-          cp source_repo/Data/p-list-december.txt destination_repo/edge/assets/p-list-december.txt
-          echo "p-list-december.txt copied to destination_repo/edge/assets/"
+          cp source_repo/Data/p-list-january.txt destination_repo/edge/assets/p-list-january.txt
+          echo "p-list-january.txt copied to destination_repo/edge/assets/"
           
           find source_repo/country_proxies -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
           echo "All files copied to target directory."
@@ -53,8 +53,8 @@ jobs:
            *
            * ProxyIP checker's
            *  - https://proxyip.victoriacross.workers.dev
-           *  - https://telegram.me/ProxyIPChecker_Bot
            *  - https://checker-3j2.pages.dev
+           *  - https://telegram.me/ProxyIPChecker_Bot
            *  - https://yumiproxy.vercel.app
            *
            * Stay in touch
