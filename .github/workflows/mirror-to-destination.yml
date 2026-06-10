@@ -33,8 +33,8 @@ jobs:
           echo "Starting file processing..."
           echo "Target directory is: $TARGET_DIR"
 
-          echo "Copying p-list-may.txt..."
-          cp source_repo/Data/p-list-may.txt destination_repo/edge/assets/p-list-may.txt
+          echo "Copying p-list-jun.txt..."
+          cp source_repo/Data/p-list-jun.txt destination_repo/edge/assets/p-list-jun.txt
           echo "p-list-may.txt copied to destination_repo/edge/assets/"
           
           find source_repo/country_proxies -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
