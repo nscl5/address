@@ -33,9 +33,9 @@ jobs:
           echo "Starting file processing..."
           echo "Target directory is: $TARGET_DIR"
 
-          echo "Copying p-list-jun.txt..."
-          cp source_repo/Data/p-list-jun.txt destination_repo/edge/assets/p-list-jun.txt
-          echo "p-list-may.txt copied to destination_repo/edge/assets/"
+          echo "Copying p-list-july.txt..."
+          cp source_repo/Data/p-list-july.txt destination_repo/edge/assets/p-list-july.txt
+          echo "proxies list For July copied to destination_repo/edge/assets/"
           
           find source_repo/country_proxies -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
           echo "All files copied to target directory."
@@ -55,7 +55,7 @@ jobs:
            *  - https://proxyip.victoriacross.workers.dev
            *  - https://checker-3j2.pages.dev
            *  - https://telegram.me/ProxyIPChecker_Bot
-           *  - https://yumiproxy.vercel.app
+           *  - https://check.proxyip.cmliussss.net/
            *
            * Stay in touch
            *  - telegram: https://telegram.me/NiREvil_GP
