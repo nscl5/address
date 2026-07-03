@@ -1342,7 +1342,6 @@ IP Address, Port, TLS, Data Center, Region, City, ASN, latency
 138.124.107.35,443,true,TR,N/A,-,Plant Holding GmbH,-
 141.98.118.80,443,true,TR,N/A,-,Hostigger INC,-
 185.200.36.36,443,true,TR,N/A,-,High Speed Telekomunikasyon ve Hab Hiz Ltd Sti,-
-185.234.66.91,443,true,TR,N/A,-,WorkTitans BV,-
 185.235.243.172,443,true,TR,N/A,-,WorkTitans BV,-
 188.132.141.24,443,true,TR,N/A,-,Geo Teknoloji AS,-
 195.16.74.73,443,true,TR,N/A,-,WorkTitans BV,-
@@ -1351,7 +1350,6 @@ IP Address, Port, TLS, Data Center, Region, City, ASN, latency
 45.89.52.247,443,true,TR,N/A,-,WorkTitans BV,-
 77.92.145.164,443,true,TR,N/A,-,ULTAHOST HOSTING VE VERI MERKEZI LTD STI,-
 84.32.230.201,443,true,TR,N/A,-,Private Customer,-
-94.131.123.74,443,true,TR,N/A,-,WorkTitans BV,-
 31.222.235.81,443,true,UA,N/A,-,NETH LLC,-
 31.41.221.121,443,true,UA,N/A,-,ONLINE Ltd,-
 91.218.212.223,443,true,UA,N/A,-,TOV Dream Line Holding,-
@@ -3479,9 +3477,6 @@ IP Address, Port, TLS, Data Center, Region, City, ASN, latency
 141.105.70.114,443,true,RU,N/A,-,HOSTKEY B.V,-
 147.45.143.22,443,true,RU,N/A,-,TimeWeb Ltd,-
 146.185.218.33,443,true,RU,N/A,-,EdgeCenter LLC,-
-147.45.245.15,443,true,RU,N/A,-,TimeWeb Ltd,-
-178.20.46.46,443,true,RU,N/A,-,Hosting technology LTD,-
-185.105.117.222,443,true,RU,N/A,-,I-SERVERS LTD,-
 185.103.109.139,443,true,RU,N/A,-,FIRST SERVER LIMITED,-
 185.117.153.169,443,true,RU,N/A,-,I-SERVERS LTD,-
 185.233.200.93,443,true,RU,N/A,-,FIRST SERVER LIMITED,-
@@ -3641,9 +3636,13 @@ IP Address, Port, TLS, Data Center, Region, City, ASN, latency
 43.156.253.94,443,true,SG,N/A,-,Tencent Building Kejizhongyi Avenue,-
 8.222.165.104,443,true,SG,N/A,-,Alibaba (US) Technology Co Ltd,-
 13.250.131.37,443,true,SG,N/A,-,Amazon.com,-
+45.89.52.85,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
+45.89.52.124,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
+185.234.66.88,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
+94.131.123.12,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
+94.131.123.251,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
 94.131.123.74,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
 154.53.166.178,443,true,TR,N/A,-,Mailbox Internet Hizmetleri Sti,-
-45.89.52.247,443,true,TR,N/A,-,Stark Industries Solutions LTD,-
 188.132.183.166,443,true,TR,N/A,-,PENTECH BILISIM TEKNOLOJILERI SANAYI VE TICARET SI,-
 185.255.172.154,443,true,TR,N/A,-,Sef Bilisim Hizmetleri AS,-
 216.9.224.160,443,true,TR,N/A,-,DC Host,-
