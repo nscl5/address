@@ -33,19 +33,24 @@ struct ProxyEntry {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Create output directory
     if let Some(parent) = Path::new(&args.output_dir).parent() {
         fs::create_dir_all(parent).context("Failed to create parent directory")?;
     }
     fs::create_dir_all(&args.output_dir).context("Failed to create output directory")?;
 
-    // Read and parse proxy file
-    let proxies = read_proxy_file(&args.input_file)
-        .context("Failed to read proxy file")?;
+    let mut proxies = read_proxy_file(&args.input_file)
+    .context("Failed to read proxy file")?;
     
     println!("Loaded {} proxies from file", proxies.len());
 
-    // Group proxies by country
+    let csv_proxies = fetch_csv_proxies("https://raw.githubusercontent.com/xgonce/Cloudflare_IP/refs/heads/main/result.csv")
+        .await
+        .context("Failed to fetch and parse CSV proxy file")?;
+    
+    println!("Loaded {} proxies from CSV source", csv_proxies.len());
+    
+    proxies.extend(csv_proxies);
+
     let mut country_groups: BTreeMap<String, Vec<ProxyEntry>> = BTreeMap::new();
     
     for proxy in &proxies {
@@ -57,7 +62,6 @@ async fn main() -> Result<()> {
 
     println!("Found proxies from {} countries", country_groups.len());
 
-    // Generate country-specific files
     for (country, country_proxies) in &country_groups {
         let country_file = format!("{}{}.txt", args.output_dir, country);
         write_country_file(&country_file, country_proxies)
@@ -65,17 +69,14 @@ async fn main() -> Result<()> {
         println!("Created {}: {} proxies", country_file, country_proxies.len());
     }
 
-    // Generate last_update.txt
     let update_file = format!("{}last_update.txt", args.output_dir);
     write_update_file(&update_file)
         .context("Failed to write update file")?;
 
-    // Generate proxies.csv
     let csv_file = format!("{}proxies.csv", args.output_dir);
     write_csv_file(&csv_file, &proxies)
         .context("Failed to write CSV file")?;
 
-    // Generate proxies.txt
     let txt_file = format!("{}proxies.txt", args.output_dir);
     write_txt_file(&txt_file, &proxies)
         .context("Failed to write TXT file")?;
@@ -113,6 +114,35 @@ fn read_proxy_file(file_path: &str) -> io::Result<Vec<ProxyEntry>> {
     Ok(proxies)
 }
 
+async fn fetch_csv_proxies(url: &str) -> Result<Vec<ProxyEntry>> {
+    let content = reqwest::get(url)
+        .await
+        .context("Failed to fetch CSV file")?
+        .text()
+        .await
+        .context("Failed to read CSV response body")?;
+
+    let mut proxies = Vec::new();
+
+    for (index, line) in content.lines().enumerate() {
+        if index == 0 || line.trim().is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 5 {
+            proxies.push(ProxyEntry {
+                ip: parts[0].trim().to_string(),
+                port: parts[2].trim().to_string(),
+                country: parts[4].trim().to_string(),
+                isp: String::new(),
+            });
+        }
+    }
+
+    Ok(proxies)
+}
+
 fn write_country_file(file_path: &str, proxies: &[ProxyEntry]) -> io::Result<()> {
     let mut file = File::create(file_path)?;
     
@@ -137,12 +167,9 @@ fn write_update_file(file_path: &str) -> io::Result<()> {
 fn write_csv_file(file_path: &str, proxies: &[ProxyEntry]) -> io::Result<()> {
     let mut file = File::create(file_path)?;
     
-    // Write CSV header
     writeln!(file, "IP Address, Port, TLS, Data Center, Region, City, ASN, latency")?;
     
-    // Write proxy data - only for port 443
     for proxy in proxies {
-        // Filter: only include proxies with port 443
         if proxy.port == "443" {
             writeln!(
                 file, 
