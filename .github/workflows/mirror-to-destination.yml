@@ -7,7 +7,7 @@ on:
   push:
     branches: 'main'
     paths:
-      - '**/US.*'
+      - '**/US.txt'
   workflow_dispatch:
 
 jobs:
@@ -33,8 +33,8 @@ jobs:
           echo "Starting file processing..."
           echo "Target directory is: $TARGET_DIR"
 
-          echo "Copying p-legacies.yaml..."
-          cp source_repo/Data/p-legacies.yaml destination_repo/edge/assets/p-legacies.yaml
+          echo "Copying p-legacies.csv..."
+          cp source_repo/Data/p-legacies.csv destination_repo/edge/assets/p-legacies.csv
           echo "proxies list For August copied to destination_repo/edge/assets/"
           
           find source_repo/country_proxies -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
@@ -52,10 +52,11 @@ jobs:
            *  - Dìana
            *
            * ProxyIP checkers
-           *  - https://proxyip.victoriacross.workers.dev
+           *  - https://proxyip.victoriacross.ir
            *  - https://checker-3j2.pages.dev
-           *  - https://telegram.me/ProxyIPChecker_Bot
-           *  - https://check.proxyip.cmliussss.net/
+           *  - https://check.proxyip.cmliussss.net
+           *  - https://cprx.goku7.workers.dev
+           *  - https://t.me/ProxyIPChecker_Bot
            *
            * Stay in touch
            *  - Telegram: https://telegram.me/NiREvil_GP
