@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: source_repo
 
       - name: Checkout destination repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: NiREvil/vless
           ssh-key: ${{ secrets.DEPLOY_KEY }}
