@@ -1,26 +1,26 @@
 name: Sync, Modify and Mirror to Destination
 
-permissions:
-  contents: write
-
 on:
   push:
-    branches: 'main'
+    branches: main
     paths:
       - '**/US.txt'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout source repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: source_repo
 
       - name: Checkout destination repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: NiREvil/vless
           ssh-key: ${{ secrets.DEPLOY_KEY }}
@@ -32,11 +32,7 @@ jobs:
 
           echo "Starting file processing..."
           echo "Target directory is: $TARGET_DIR"
-
-          echo "Copying p-legacies.csv..."
-          cp source_repo/Data/p-legacies.csv destination_repo/edge/assets/p-legacies.csv
-          echo "proxies list For August copied to destination_repo/edge/assets/"
-          
+         
           find source_repo/country_proxies -maxdepth 1 -type f -exec cp {} $TARGET_DIR/ \;
           echo "All files copied to target directory."
 
@@ -47,18 +43,17 @@ jobs:
 
           echo "
            /**
-           * Credits
-           *  - GitHub: @Dìana-Cl
-           *  - Telegram: @Di4Diana
+           * CREDITS
+           *  - Dìana-Cl
            *
-           * ProxyIP checkers
+           * PROXYIP CHECKERS
            *  - https://proxyip.victoriacross.ir
            *  - https://checker-3j2.pages.dev
            *  - https://check.proxyip.cmliussss.net
            *  - https://cprx.goku7.workers.dev
            *  - https://t.me/ProxyIPChecker_Bot
            *
-           * Stay in touch
+           * STAY IN TOUCH
            *  - Telegram: https://telegram.me/NiREvil_GP
            *  - Proxy Land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
            */
